@@ -5,22 +5,24 @@
   "description": "Cyphr-OIDC Bridge authentication extension",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs"
   ],
   "host_permissions": [
+    "https://*/*",
     "http://localhost:8080/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://localhost:8080/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
   ],
   "background": {
     "service_worker": "src/background.js",
     "type": "module"
   },
-  "content_scripts": [
-    {
-      "matches": ["http://localhost:8080/*"],
-      "js": ["src/content.js"],
-      "run_at": "document_idle"
-    }
-  ],
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_icon": {
@@ -35,5 +37,14 @@
     "32": "assets/icon-32.png",
     "48": "assets/icon-48.png",
     "128": "assets/icon-128.png"
-  }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["cyphr_crypto_bg.wasm", "wasm/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
