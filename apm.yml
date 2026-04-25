@@ -1,0 +1,9 @@
+name: cyphrmask-OIDC-poc
+version: 1.0.0
+description: APM project for cyphrmask-OIDC-poc
+author: ic4y
+dependencies:
+  apm:
+  - srid/agency
+  mcp: []
+scripts: {}
