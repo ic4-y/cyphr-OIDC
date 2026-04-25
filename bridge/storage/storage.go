@@ -4,7 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -162,9 +165,27 @@ func wrapClient(c *Client) op.Client {
 }
 
 func NewStorage() *Storage {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		panic(fmt.Sprintf("failed to generate signing key: %v", err))
+	return mustNewStorage("")
+}
+
+func NewStorageWithKeyPath(path string) *Storage {
+	return mustNewStorage(path)
+}
+
+func mustNewStorage(keyPath string) *Storage {
+	var key *rsa.PrivateKey
+	if keyPath != "" {
+		var err error
+		key, err = loadOrGenerateKey(keyPath)
+		if err != nil {
+			panic(fmt.Sprintf("failed to load signing key from %s: %v", keyPath, err))
+		}
+	} else {
+		var err error
+		key, err = rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			panic(fmt.Sprintf("failed to generate signing key: %v", err))
+		}
 	}
 	return &Storage{
 		authRequests:  make(map[string]*AuthRequest),
@@ -585,6 +606,33 @@ func (r *RefreshTokenRequest) GetClientID() string              { return r.Appli
 func (r *RefreshTokenRequest) GetScopes() []string              { return r.Scopes }
 func (r *RefreshTokenRequest) GetSubject() string               { return r.Subject }
 func (r *RefreshTokenRequest) SetCurrentScopes(scopes []string) { r.Scopes = scopes }
+
+func loadOrGenerateKey(path string) (*rsa.PrivateKey, error) {
+	if data, err := os.ReadFile(path); err == nil {
+		block, _ := pem.Decode(data)
+		if block == nil {
+			return nil, fmt.Errorf("failed to decode PEM block")
+		}
+		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse PKCS1 private key: %w", err)
+		}
+		return key, nil
+	}
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate key: %w", err)
+	}
+	block := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}
+	if err := os.WriteFile(path, pem.EncodeToMemory(block), 0o600); err != nil {
+		return nil, fmt.Errorf("failed to save key: %w", err)
+	}
+	return key, nil
+}
 
 // TestUser is a PoC user with their public key and email.
 type TestUser struct {

@@ -32,7 +32,9 @@ func HandleChallenge(store *ChallengeStore) http.HandlerFunc {
 	}
 }
 
-func HandleVerify(store *ChallengeStore, oidcStore *storage.Storage) http.HandlerFunc {
+func HandleVerify(store *ChallengeStore, oidcStore *storage.Storage, usersJSON string) http.HandlerFunc {
+	users := loadUsers(usersJSON)
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		var rawBody map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&rawBody); err != nil {
@@ -84,7 +86,7 @@ func HandleVerify(store *ChallengeStore, oidcStore *storage.Storage) http.Handle
 
 		payBytes := []byte(payRaw)
 
-		user, ok := testUsers[pay.Tmb]
+		user, ok := users[pay.Tmb]
 		if !ok {
 			http.Error(w, "unknown key thumbprint", http.StatusUnauthorized)
 			return
@@ -112,4 +114,28 @@ func HandleVerify(store *ChallengeStore, oidcStore *storage.Storage) http.Handle
 			"authReqID": authReqID,
 		})
 	}
+}
+
+func loadUsers(usersJSON string) map[string]storage.TestUser {
+	users := make(map[string]storage.TestUser)
+	for k, v := range testUsers {
+		users[k] = v
+	}
+
+	if usersJSON == "" {
+		return users
+	}
+
+	var envUsers map[string]storage.TestUser
+	if err := json.Unmarshal([]byte(usersJSON), &envUsers); err != nil {
+		log.Printf("failed to parse BRIDGE_USERS: %v", err)
+		return users
+	}
+
+	for k, v := range envUsers {
+		users[k] = v
+	}
+
+	log.Printf("loaded %d users (%d from env)", len(users), len(envUsers))
+	return users
 }

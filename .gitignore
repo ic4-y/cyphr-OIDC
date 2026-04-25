@@ -37,6 +37,7 @@ result-*
 # Docker
 docker-data/
 *.log
+keys/
 
 # Env files (keep .env.example)
 .env
