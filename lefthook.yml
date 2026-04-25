@@ -1,0 +1,73 @@
+pre-commit:
+  parallel: true
+  commands:
+    go-fmt:
+      run: |
+        if command -v gofumpt >/dev/null 2>&1; then
+          find bridge -name '*.go' -print0 2>/dev/null | xargs -0 -r gofumpt -w
+        fi
+      stage_fixed: true
+
+    go-lint:
+      run: |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          cd bridge && golangci-lint run --timeout=5m
+        fi
+
+    rust-check:
+      run: |
+        if command -v cargo >/dev/null 2>&1; then
+          cd cyphrmask/wasm-crypto && cargo check
+        fi
+
+    rust-fmt:
+      run: |
+        if command -v cargo >/dev/null 2>&1; then
+          find cyphrmask/wasm-crypto -name '*.rs' -print0 2>/dev/null | xargs -0 -r rustfmt
+        fi
+      stage_fixed: true
+
+    ts-check:
+      run: |
+        if command -v npx >/dev/null 2>&1; then
+          cd cyphrmask && npx tsc --noEmit 2>/dev/null || true
+        fi
+
+    nix-fmt:
+      run: |
+        if command -v nixpkgs-fmt >/dev/null 2>&1; then
+          find . -name "*.nix" -type f -exec nixpkgs-fmt {} +
+        fi
+      stage_fixed: true
+
+    secrets-scan:
+      run: |
+        if command -v ripsecrets >/dev/null 2>&1; then
+          ripsecrets --strict-ignore `git diff --cached --name-only --diff-filter=ACM` || true
+        fi
+
+commit-msg:
+  commands:
+    conventional-commit:
+      run: |
+        if [[ "$(head -n 1 {1})" =~ ^WIP(:.*)?$|^wip(:.*)?$|^fixup\!.*|^squash\!.* ]]; then
+          exit 0
+        fi
+        if command -v conform >/dev/null 2>&1; then
+          conform enforce --commit-msg-file {1}
+        fi
+
+pre-push:
+  parallel: true
+  commands:
+    go-test:
+      run: |
+        if command -v go >/dev/null 2>&1; then
+          cd bridge && go test ./... || true
+        fi
+
+    rust-test:
+      run: |
+        if command -v cargo >/dev/null 2>&1; then
+          cd cyphrmask/wasm-crypto && cargo test || true
+        fi
