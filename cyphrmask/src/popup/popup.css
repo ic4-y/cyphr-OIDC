@@ -1,0 +1,116 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    width: 320px;
+    min-height: 200px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+.container {
+    padding: 1rem;
+}
+
+h2 {
+    font-size: 1.125rem;
+    margin-bottom: 0.25rem;
+}
+
+.subtitle {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.challenge-box {
+    background: #1e293b;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    border: 1px solid #334155;
+}
+
+.challenge-box label {
+    color: #64748b;
+    font-size: 0.75rem;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.challenge-box code {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: #93c5fd;
+}
+
+button {
+    width: 100%;
+    padding: 0.625rem 1rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-bottom: 0.5rem;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-approve {
+    background: #10b981;
+    color: white;
+}
+
+.btn-approve:hover {
+    background: #059669;
+}
+
+.message {
+    padding: 0.625rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+.message.info {
+    background: #1e3a5f;
+    color: #93c5fd;
+}
+
+.message.success {
+    background: #065f46;
+    color: #6ee7b7;
+}
+
+.message.error {
+    background: #7f1d1d;
+    color: #fca5a5;
+}
+
+.spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #334155;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 1rem auto;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
