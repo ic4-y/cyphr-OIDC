@@ -3,9 +3,6 @@
 
 set shell := ["bash", "-c"]
 
-# Build everything
-build: build-bridge build-wasm
-
 # Compile Go binary
 build-bridge:
     cd bridge && go mod tidy
@@ -14,6 +11,14 @@ build-bridge:
 # Compile Rust Wasm module → JS bundle for extension
 build-wasm:
     cd cyphrmask/wasm-crypto && wasm-pack build --target web --out-dir ../src/wasm
+
+# Build extension popup (React → JS, output to cyphrmask/dist/)
+build-popup:
+    cd cyphrmask && npm install
+    cd cyphrmask && npx vite build
+
+# Build everything
+build: build-bridge build-wasm build-popup
 
 # Run all tests
 test:
