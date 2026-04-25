@@ -106,6 +106,29 @@ pub fn generate_keypair() -> String {
     .to_string()
 }
 
+/// Derive the public key coordinates from a P-256 private key.
+/// Returns JSON with public_key_x, public_key_y, and the JWK thumbprint.
+#[wasm_bindgen]
+pub fn derive_public_key(private_key_hex: &str) -> String {
+    use p256::EncodedPoint;
+
+    let key_bytes = hex::decode(private_key_hex).expect("invalid hex in private key");
+    let secret_key = SecretKey::from_slice(&key_bytes).expect("invalid P-256 private key");
+    let public_key = secret_key.public_key();
+    let point = EncodedPoint::from(&public_key);
+
+    let x_hex = hex::encode(&point.as_bytes()[1..33]);
+    let y_hex = hex::encode(&point.as_bytes()[33..65]);
+    let thumbprint = compute_thumbprint(&x_hex, &y_hex);
+
+    serde_json::json!({
+        "public_key_x": x_hex,
+        "public_key_y": y_hex,
+        "thumbprint": thumbprint
+    })
+    .to_string()
+}
+
 /// Get the current Unix timestamp. Uses js_sys on wasm32, std otherwise.
 fn now_timestamp() -> i64 {
     #[cfg(target_arch = "wasm32")]

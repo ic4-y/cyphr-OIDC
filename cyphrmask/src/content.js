@@ -4,6 +4,9 @@
 (function () {
   'use strict';
 
+  // Detect the bridge host from the current page URL
+  const bridgeHost = window.location.origin;
+
   // Signal to the page that the extension is available
   window.postMessage({
     source: 'cyphrmask',
@@ -37,12 +40,12 @@
     }
   });
 
-  // Notify the page when the extension is ready
+  // Notify the page when the extension is ready, including the detected host
   chrome.runtime.sendMessage({ action: 'GET_STATUS' }, (status) => {
     window.postMessage({
       source: 'cyphrmask',
       type: 'EXTENSION_STATUS',
-      status: status
+      status: { ...status, bridgeHost }
     }, '*');
   });
 })();

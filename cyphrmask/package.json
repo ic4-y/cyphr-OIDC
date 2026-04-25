@@ -4,7 +4,7 @@
   "description": "Chromium extension for Cyphr-OIDC authentication",
   "scripts": {
     "build:wasm": "cd wasm-crypto && wasm-pack build --target web --out-dir ../src/wasm",
-    "build:popup": "tsc && vite build",
+    "build:popup": "vite build",
     "build": "npm run build:wasm && npm run build:popup",
     "dev": "tsc --watch"
   },
@@ -16,6 +16,7 @@
     "@types/chrome": "^0.0.268",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.0",
     "typescript": "^5.4.0",
     "vite": "^5.2.0"
   }
