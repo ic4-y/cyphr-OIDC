@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyphrMask - Sign In</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .subtitle { color: #94a3b8; font-size: 0.875rem; margin-bottom: 1.5rem; }
+        .challenge-box {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.75rem;
+            word-break: break-all;
+            margin-bottom: 1.5rem;
+            border: 1px solid #334155;
+        }
+        .challenge-box label {
+            color: #64748b;
+            display: block;
+            margin-bottom: 0.5rem;
+            font-family: sans-serif;
+            font-size: 0.875rem;
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-primary:disabled {
+            background: #475569;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            text-align: center;
+            display: none;
+        }
+        .status.success { display: block; background: #065f46; color: #6ee7b7; }
+        .status.error { display: block; background: #7f1d1d; color: #fca5a5; }
+        .status.loading { display: block; background: #1e3a5f; color: #93c5fd; }
+        .extension-hint {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: #312e81;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: #c4b5fd;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cyphr-OIDC Bridge</h1>
+        <p class="subtitle">Authenticate using your CyphrMask extension</p>
+
+        <div class="challenge-box">
+            <label>Challenge Nonce</label>
+            <div id="nonce-display">Loading...</div>
+        </div>
+
+        <button id="sign-btn" class="btn-primary" disabled>
+            Waiting for CyphrMask...
+        </button>
+
+        <div id="status" class="status"></div>
+
+        <div class="extension-hint">
+            Make sure the CyphrMask extension is installed and unlocked
+        </div>
+    </div>
+
+    <script>
+        const authRequestID = '{{.AuthRequestID}}';
+        let currentNonce = '';
+
+        async function fetchChallenge() {
+            try {
+                const resp = await fetch('/api/challenge');
+                if (!resp.ok) throw new Error('Failed to fetch challenge');
+                const data = await resp.json();
+                currentNonce = data.nonce;
+                document.getElementById('nonce-display').textContent = data.nonce.substring(0, 32) + '...';
+                await checkExtension();
+            } catch (err) {
+                showStatus('Failed to load challenge: ' + err.message, 'error');
+            }
+        }
+
+        async function checkExtension() {
+            try {
+                const resp = await chrome.runtime.sendMessage(
+                    { action: 'PING' }
+                ).catch(() => null);
+
+                if (resp && resp.status === 'ready') {
+                    const btn = document.getElementById('sign-btn');
+                    btn.disabled = false;
+                    btn.textContent = 'Sign In with CyphrMask';
+                } else {
+                    showStatus('Waiting for CyphrMask extension...', 'loading');
+                }
+            } catch {
+                showStatus('Waiting for CyphrMask extension...', 'loading');
+            }
+        }
+
+        document.getElementById('sign-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('sign-btn');
+            btn.disabled = true;
+            btn.textContent = 'Requesting signature...';
+            showStatus('Waiting for your approval in CyphrMask...', 'loading');
+
+            try {
+                const resp = await chrome.runtime.sendMessage(
+                    { action: 'REQUEST_SIGNATURE', nonce: currentNonce }
+                );
+
+                if (resp && resp.coz) {
+                    await submitCoz(resp.coz);
+                } else {
+                    throw new Error(resp?.error || 'Signature request failed');
+                }
+            } catch (err) {
+                showStatus('Error: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Try Again';
+            }
+        });
+
+        async function submitCoz(cozString) {
+            showStatus('Verifying signature...', 'loading');
+
+            try {
+                const resp = await fetch('/api/verify?authRequestID=' + encodeURIComponent(authRequestID), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: cozString
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    throw new Error('Verification failed: ' + err);
+                }
+
+                const data = await resp.json();
+                showStatus('Authenticated as ' + data.email + '. Redirecting...', 'success');
+
+                setTimeout(() => {
+                    window.location.href = '/login/callback?id=' + encodeURIComponent(authRequestID);
+                }, 1000);
+            } catch (err) {
+                showStatus('Error: ' + err.message, 'error');
+                document.getElementById('sign-btn').disabled = false;
+                document.getElementById('sign-btn').textContent = 'Try Again';
+            }
+        }
+
+        function showStatus(message, type) {
+            const el = document.getElementById('status');
+            el.textContent = message;
+            el.className = 'status ' + type;
+        }
+
+        fetchChallenge();
+    </script>
+</body>
+</html>
