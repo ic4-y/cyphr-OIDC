@@ -56,16 +56,43 @@ services:
     # Mount your TLS certs, configure a reverse proxy, etc.
 ```
 
+### Installing the CyphrMask Extension
+
+The extension is built with Vite (React popup) and wasm-pack (Rust crypto). After building, load the `cyphrmask/dist/` directory as an unpacked extension.
+
+```bash
+# 1. Build the Wasm module
+just build-wasm
+
+# 2. Build the extension popup
+just build-popup
+```
+
+Then in your Chromium browser (Chrome, Brave, Edge):
+
+1. Navigate to `chrome://extensions` (or `brave://extensions` / `edge://extensions`)
+2. Enable **Developer mode** (toggle in the top-right corner)
+3. Click **Load unpacked**
+4. Select the `cyphrmask/dist/` directory (not `cyphrmask/`)
+5. The CyphrMask icon appears in your toolbar
+
+On first use:
+- Click the extension icon
+- Click **Generate New Key** (or import an existing key/backup file)
+- Switch to the **Settings** tab to copy your Principal Root (`tmb`) and public keys for registering with the Bridge
+
+For production deployments, remove `http://localhost:8080/*` from `host_permissions` and `content_scripts` in `manifest.json` — the `https://*/*` pattern covers any HTTPS bridge.
+
 ---
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │   Downstream     │     │  Cyphr-OIDC      │     │   CyphrMask      │
 │   Application    │────▶│     Bridge       │◀───▶│  (Chromium Ext)  │
 │  (Forgejo, etc.) │     │  (Go + zitadel)  │     │  (TS + Rust/Wasm)│
-└─────────────────┘     └──────────────────┘     └──────────────────┘
+└──────────────────┘     └──────────────────┘     └──────────────────┘
         │                        │                        │
         │ OIDC redirect          │ OIDC token             │ Coz payload
         │ + code exchange        │ minting + JWT          │ (ES256 signed)
@@ -156,89 +183,109 @@ This is [an open issue](https://codeberg.org/forgejo/forgejo/issues/732) in Forg
 
 ## Registering a Client Application
 
-Any OIDC-capable application can use the Bridge. The registration pattern is the same as Forgejo:
+Any OIDC-capable application can use the Bridge. Register clients via the `BRIDGE_CLIENTS` environment variable:
 
-1. **Add the client** in `bridge/main.go`:
-   ```go
-   oidcStore.RegisterClient(storage.NewClient(
-       "my-app",
-       "app-secret",
-       []string{"https://my-app.example.com/callback"},
-       func(id string) string {
-           return "/login?authRequestID=" + id
-       },
-   ))
-   ```
+```bash
+BRIDGE_CLIENTS='[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]}]'
+```
 
-2. **Configure the app** to use OIDC with the Bridge's discovery URL:
-   ```
-   https://bridge.example.com/.well-known/openid-configuration
-   ```
+Or in `docker-compose.yml`:
 
-3. **Use Authorization Code Grant** — the Bridge supports `response_type=code` with PKCE.
+```yaml
+environment:
+  - BRIDGE_CLIENTS=[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]}]
+```
+
+To register multiple clients:
+
+```json
+[
+  {"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]},
+  {"id":"grafana","secret":"grafana-secret","redirect_uris":["https://grafana.example/login/generic_oauth"]}
+]
+```
+
+When `BRIDGE_CLIENTS` is set, it replaces the default client (`BRIDGE_CLIENT_ID`). When unset, the single default client is registered from `BRIDGE_CLIENT_ID`, `BRIDGE_CLIENT_SECRET`, and `BRIDGE_CALLBACK_URL`.
+
+Then configure your app to use OIDC with the Bridge's discovery URL:
+
+```
+https://bridge.example.com/.well-known/openid-configuration
+```
+
+The Bridge supports the Authorization Code Grant with `response_type=code` and PKCE.
 
 ---
 
-## Adding Your Identity (tmb + Public Key)
+## Managing Your Cyphr Identity
 
-The Bridge needs to map your Cyphr Principal Root (`tmb`) to an identity. For the PoC, this is done in code.
+Your identity is your P-256 keypair. The CyphrMask popup has a **Settings** tab that handles everything.
 
-### Step 1: Get Your Thumbprint
+### First Setup
 
 1. Load the CyphrMask extension in your browser
-2. Click the extension icon to open the popup
-3. Your **Principal Root** (thumbprint) is displayed — copy it
+2. Click the extension icon
+3. Click **Generate New Key** (or import an existing key/backup)
+4. Switch to the **Settings** tab to view your Principal Root and public keys
 
-### Step 2: Get Your Public Key
+### Export Your Identity
 
-The extension stores your P-256 keypair in `chrome.storage.local`. You can extract the public key from the browser console:
+In the Settings tab, click **Export Identity Backup**. This downloads a JSON file:
 
-```javascript
-chrome.storage.local.get(['privateKey'], (result) => {
-    // The private key is stored as hex. You'll need to derive the public key.
-    // For now, use the popup UI which shows both.
-    console.log(result);
-});
+```json
+{
+  "principal_root": "cLj8vsYt...",
+  "public_key_x": "...",
+  "public_key_y": "...",
+  "private_key": "...",
+  "algorithm": "P-256",
+  "format": "cyphr-backup-v1"
+}
 ```
 
-Alternatively, use the Wasm module directly to generate a keypair and get all three values:
+⚠️ **Anyone with this file can impersonate you.** Keep it secure.
 
-```javascript
-// In the browser console with the extension loaded
-import init, { generate_keypair, compute_thumbprint } from './wasm/cyphr_crypto.js';
-await init();
-const keys = JSON.parse(generate_keypair());
-// keys = { private_key, public_key_x, public_key_y }
-const tmb = compute_thumbprint(keys.public_key_x, keys.public_key_y);
+### Import Your Identity
+
+In the Settings tab, either:
+- **Paste a private key** — enter the 64-character hex-encoded private key
+- **Import a backup file** — upload the JSON file from export
+
+The extension validates the key format before accepting it.
+
+---
+
+## Adding Your Identity to the Bridge
+
+The Bridge needs to map your Principal Root (`tmb`) to an identity (email + public key).
+
+### Option 1: Environment Variable (recommended for testing)
+
+Copy your `tmb` and public key from the extension's Settings tab, then set:
+
+```bash
+BRIDGE_USERS='{"cLj8vsYt...":{"email":"you@example.com","public_key":"-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"}}'
 ```
 
-### Step 3: Register in the Bridge
+Or add to `docker-compose.yml`:
 
-Edit `bridge/handlers/verify.go`:
+```yaml
+environment:
+  - BRIDGE_USERS={"<your-tmb>":{"email":"you@example.com","public_key":"..."}}
+```
+
+### Option 2: Hardcoded in Code
+
+Edit `bridge/handlers/verify.go` and add to the `testUsers` map:
 
 ```go
 var testUsers = map[string]storage.TestUser{
-    "cLj8vsYtMBwYkzoFVZHBZo6SNL5hTN0OU1ygWJdBJak": {
-        PublicKey: "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...\n-----END PUBLIC KEY-----",
-        Email:     "test@example.com",
-    },
     "YOUR_THUMBPRINT_HERE": {
-        PublicKey: "-----BEGIN PUBLIC KEY-----\nYOUR_PUBLIC_KEY_PEM_HERE\n-----END PUBLIC KEY-----",
+        PublicKey: "-----BEGIN PUBLIC KEY-----\nYOUR_PUBLIC_KEY_PEM\n-----END PUBLIC KEY-----",
         Email:     "you@example.com",
     },
 }
 ```
-
-Rebuild and restart the bridge:
-
-```bash
-just build-bridge
-just down && just up
-```
-
-### Production Path
-
-For production, replace the hardcoded map with a proper database (SQLite, PostgreSQL). The `storage/storage.go` already implements `op.Storage` — you'd add a `Users` table with columns `principal_root`, `public_key_pem`, `email`, and update `HandleVerify` to query instead of map-lookup.
 
 ---
 
@@ -273,7 +320,7 @@ For production, replace the hardcoded map with a proper database (SQLite, Postgr
 │   │   └── wasm/               # Generated by wasm-pack (not committed)
 │   └── wasm-crypto/            # Rust Wasm module
 │       ├── Cargo.toml
-│       └── src/lib.rs          # sign_action, compute_thumbprint, generate_keypair
+│       └── src/lib.rs          # sign_action, compute_thumbprint, generate_keypair, derive_public_key
 ├── docker-compose.yml          # Local dev stack
 ├── justfile                    # Task runner
 ├── .env.example                # Environment variables
@@ -285,9 +332,10 @@ For production, replace the hardcoded map with a proper database (SQLite, Postgr
 
 | Command | Description |
 |---------|-------------|
-| `just build` | Build Bridge + Wasm module |
+| `just build` | Build Bridge + Wasm module + extension popup |
 | `just build-bridge` | Compile Go binary |
 | `just build-wasm` | Compile Rust Wasm → JS bundle |
+| `just build-popup` | Build extension popup (React → JS via Vite) |
 | `just test` | Run all tests (Go + Rust) |
 | `just fmt` | Format Go code with gofumpt |
 | `just lint` | Run `go vet` |
@@ -306,6 +354,9 @@ All configuration is via environment variables:
 | `BRIDGE_CLIENT_ID` | `cyphrmask-poc` | Default client ID |
 | `BRIDGE_CLIENT_SECRET` | `dev-secret-change-me` | Default client secret |
 | `BRIDGE_CALLBACK_URL` | `http://localhost:8080/callback` | OAuth2 callback URI |
+| `BRIDGE_SIGNING_KEY_PATH` | _(empty)_ | Path to RSA signing key PEM file. If the file doesn't exist, a new key is generated and saved there. Persists across restarts. |
+| `BRIDGE_USERS` | _(empty)_ | JSON map of thumbprint → `{email, public_key}`. Overrides the default test user. |
+| `BRIDGE_CLIENTS` | _(empty)_ | JSON array of `{"id","secret","redirect_uris"}`. When set, replaces the default client. |
 
 Copy `.env.example` to `.env` and adjust for your environment.
 
@@ -331,8 +382,8 @@ Here's exactly what happens end-to-end:
 
 This is a **proof-of-concept**. Do not deploy to production without:
 
-- Replacing hardcoded test users with a proper database
-- Using real RSA/ECDSA signing keys (currently generated at startup, lost on restart)
+- Replacing `BRIDGE_USERS` env var with a proper database
+- Restricting signing key file permissions (currently 0600, good for PoC)
 - Adding HTTPS / TLS
 - Implementing proper session management
 - Adding rate limiting and abuse prevention
