@@ -6,7 +6,7 @@ services:
     container_name: cyphr-bridge
     environment:
       - BRIDGE_PORT=8080
-      - BRIDGE_ISSUER_URL=http://localhost:8080
+      - BRIDGE_ISSUER_URL=http://cyphr-bridge:8080
       - BRIDGE_SIGNING_KEY_PATH=/keys/signing-key.pem
       - BRIDGE_USERS
       - BRIDGE_CLIENTS

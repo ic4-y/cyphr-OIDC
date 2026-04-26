@@ -13,6 +13,9 @@ No fork, no patch, no protocol changes to downstream apps. They just see a stand
 ### From Scratch (5 minutes)
 
 ```bash
+# 0. Add bridge hostname to /etc/hosts (required for browser access)
+echo "127.0.0.1 cyphr-bridge" | sudo tee -a /etc/hosts
+
 # 1. Enter the dev shell (NixOS)
 nix develop
 
@@ -23,12 +26,12 @@ just build
 just up
 
 # 4. Verify it's running
-curl http://localhost:8080/.well-known/openid-configuration
-curl http://localhost:8080/health
+curl http://cyphr-bridge:8080/.well-known/openid-configuration
+curl http://cyphr-bridge:8080/health
 curl http://localhost:3000
 ```
 
-The bridge is now serving as an OIDC provider on `http://localhost:8080`. Forgejo is available at `http://localhost:3000` with an admin user (`forgejo-admin`/`admin123`) and the CyphrMask OIDC auth source pre-registered. Open `http://localhost:3000/user/login` and click **Sign in with CyphrMask** to test.
+The bridge is now serving as an OIDC provider on `http://cyphr-bridge:8080`. Forgejo is available at `http://localhost:3000` with an admin user (`forgejo-admin`/`admin123`) and the CyphrMask OIDC auth source pre-registered. Open `http://localhost:3000/user/login` and click **Sign in with CyphrMask** to test.
 
 ### Deploying a Docker Image
 
@@ -142,7 +145,7 @@ In `bridge/main.go`, add Forgejo as an OIDC client:
 oidcStore.RegisterClient(storage.NewClient(
     "forgejo",                         // client_id
     "forgejo-secret",                  // client_secret (save this!)
-    []string{"https://forgejo.example.com/user/oauth2/Cyphr/callback"},
+    []string{"https://forgejo.example.com/user/oauth2/CyphrMask/callback"},
     func(id string) string {
         return "/login?authRequestID=" + id
     },
@@ -198,21 +201,21 @@ This is [an open issue](https://codeberg.org/forgejo/forgejo/issues/732) in Forg
 Any OIDC-capable application can use the Bridge. Register clients via the `BRIDGE_CLIENTS` environment variable:
 
 ```bash
-BRIDGE_CLIENTS='[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]}]'
+BRIDGE_CLIENTS='[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/CyphrMask/callback"]}]'
 ```
 
 Or in `docker-compose.yml`:
 
 ```yaml
 environment:
-  - BRIDGE_CLIENTS=[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]}]
+  - BRIDGE_CLIENTS=[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/CyphrMask/callback"]}]
 ```
 
 To register multiple clients:
 
 ```json
 [
-  {"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]},
+  {"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/CyphrMask/callback"]},
   {"id":"grafana","secret":"grafana-secret","redirect_uris":["https://grafana.example/login/generic_oauth"]}
 ]
 ```
@@ -362,7 +365,7 @@ All configuration is via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BRIDGE_PORT` | `8080` | HTTP listen port |
-| `BRIDGE_ISSUER_URL` | `http://localhost:8080` | OIDC issuer URL (must match the public URL) |
+| `BRIDGE_ISSUER_URL` | `http://cyphr-bridge:8080` | OIDC issuer URL (must match the public URL; use `localhost` only if Forgejo runs on the same host) |
 | `BRIDGE_CLIENT_ID` | `cyphrmask-poc` | Default client ID |
 | `BRIDGE_CLIENT_SECRET` | `dev-secret-change-me` | Default client secret |
 | `BRIDGE_CALLBACK_URL` | `http://localhost:8080/callback` | OAuth2 callback URI |
