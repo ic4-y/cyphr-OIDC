@@ -36,7 +36,7 @@ lint:
 
 # Run bridge locally for dev testing
 run:
-    mkdir -p .keys
+    mkdir -p bridge/.keys
     cd bridge && go run ./...
 
 # Start local dev stack

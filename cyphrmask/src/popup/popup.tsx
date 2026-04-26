@@ -152,7 +152,7 @@ function App() {
         if (!identity) return;
         const pubKey = '04' + identity.publicKeyX + identity.publicKeyY;
         const json = `{"${identity.thumbprint}":{"public_key":"${pubKey}","email":"user@example.com"}}`;
-        navigator.clipboard.writeText(json);
+        navigator.clipboard.writeText(`BRIDGE_USERS='${json}'`);
         setMessage('Bridge user JSON copied!');
         setMessageType('success');
     };

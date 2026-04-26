@@ -164,7 +164,7 @@ function App() {
         if (!identity) return;
         const pubKey = '04' + identity.publicKeyX + identity.publicKeyY;
         const json = `{"${identity.thumbprint}":{"public_key":"${pubKey}","email":"user@example.com"}}`;
-        navigator.clipboard.writeText(json);
+        navigator.clipboard.writeText(`BRIDGE_USERS='${json}'`);
         setStatusMessage('Bridge user JSON copied to clipboard.');
     };
 
@@ -259,11 +259,11 @@ function App() {
             <div className="setting-group">
                 <label>Bridge User JSON</label>
                 <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.5rem' }}>
-                    Paste into <code>BRIDGE_USERS</code> env var or <code>.env</code> file
+                    Click 📋 to copy — paste into <code>.env</code> at project root
                 </p>
                 <div className="value-row">
                     <code className="value" style={{ fontSize: '0.65rem', wordBreak: 'break-all' }}>
-                        {identity && `{"${identity.thumbprint}":{"public_key":"04${identity.publicKeyX}${identity.publicKeyY}","email":"user@example.com"}}`}
+                        {identity && `BRIDGE_USERS='{"${identity.thumbprint}":{"public_key":"04${identity.publicKeyX}${identity.publicKeyY}","email":"user@example.com"}}'`}
                     </code>
                     <button className="btn-icon" onClick={copyBridgeUserJSON} title="Copy">
                         📋
