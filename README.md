@@ -13,6 +13,10 @@ No fork, no patch, no protocol changes to downstream apps. They just see a stand
 ### From Scratch (5 minutes)
 
 ```bash
+# 0. Allow container-to-host traffic on port 8080
+sudo iptables -I INPUT -p tcp --dport 8080 -j ACCEPT
+# To remove later: sudo iptables -D INPUT -p tcp --dport 8080 -j ACCEPT
+
 # 1. Enter the dev shell (NixOS)
 nix develop
 
@@ -28,7 +32,7 @@ curl http://localhost:8080/health
 curl http://localhost:3000
 ```
 
-The bridge is now serving as an OIDC provider on `http://localhost:8080`. Forgejo is available at `http://localhost:3000` with an admin user (`forgejo-admin`/`admin123`) and the CyphrMask OIDC auth source pre-registered. Open `http://localhost:3000/user/login` and click **Sign in with CyphrMask** to test.
+The bridge runs directly on the host network (`:8080`). Forgejo uses `extra_hosts` to resolve `localhost` to the Docker host gateway, so the OIDC token exchange works from inside the container. Forgejo is available at `http://localhost:3000` with an admin user (`forgejo-admin`/`admin123`) and the CyphrMask OIDC auth source pre-registered. Open `http://localhost:3000/user/login` and click **Sign in with CyphrMask** to test.
 
 ### Deploying a Docker Image
 
