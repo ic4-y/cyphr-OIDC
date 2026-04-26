@@ -52,5 +52,4 @@ bridge/.keys/
 *.iml
 .DS_Store
 Thumbs.db
-docs/
 forgejo/
