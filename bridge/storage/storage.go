@@ -78,7 +78,6 @@ func (a *AuthRequest) GetResponseMode() oidc.ResponseMode    { return "" }
 func (a *AuthRequest) GetScopes() []string                   { return a.Scopes }
 func (a *AuthRequest) GetState() string                      { return a.State }
 func (a *AuthRequest) GetSubject() string                    { return a.UserID }
-func (a *AuthRequest) GetEmail() string                      { return a.Email }
 func (a *AuthRequest) Done() bool                            { return a.completed }
 
 type Client struct {
@@ -443,13 +442,7 @@ func (s *Storage) SetUserinfoFromScopes(ctx context.Context, userinfo *oidc.User
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	userinfo.Subject = userID
-	var email string
-	for _, req := range s.authRequests {
-		if req.UserID == userID && req.Email != "" {
-			email = req.Email
-			break
-		}
-	}
+	email := s.findEmailBySubject(userID)
 	for _, scope := range scopes {
 		switch scope {
 		case oidc.ScopeEmail:
@@ -472,10 +465,8 @@ func (s *Storage) SetUserinfoFromRequest(ctx context.Context, userinfo *oidc.Use
 		case oidc.ScopeEmail:
 			if ar, ok := token.(*AuthRequest); ok {
 				userinfo.Email = ar.Email
-			} else {
-				userinfo.Email = token.GetSubject()
 			}
-			userinfo.EmailVerified = true
+			userinfo.EmailVerified = userinfo.Email != ""
 		case oidc.ScopeProfile:
 			userinfo.PreferredUsername = token.GetSubject()
 			userinfo.Name = token.GetSubject()
@@ -526,17 +517,20 @@ func (s *Storage) SetIntrospectionFromToken(ctx context.Context, introspection *
 	return fmt.Errorf("token not valid for this client")
 }
 
+func (s *Storage) findEmailBySubject(userID string) string {
+	for _, req := range s.authRequests {
+		if req.UserID == userID && req.Email != "" {
+			return req.Email
+		}
+	}
+	return ""
+}
+
 func (s *Storage) GetPrivateClaimsFromScopes(ctx context.Context, userID, clientID string, scopes []string) (map[string]any, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	claims := make(map[string]any)
-	var email string
-	for _, req := range s.authRequests {
-		if req.UserID == userID && req.Email != "" {
-			email = req.Email
-			break
-		}
-	}
+	email := s.findEmailBySubject(userID)
 	for _, scope := range scopes {
 		switch scope {
 		case oidc.ScopeEmail:
