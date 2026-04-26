@@ -3,11 +3,9 @@ package e2e
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -15,99 +13,15 @@ import (
 	"time"
 
 	"github.com/ic4y/cyphrmask-oidc-poc/bridge/handlers"
-	"github.com/ic4y/cyphrmask-oidc-poc/bridge/storage"
+	"github.com/ic4y/cyphrmask-oidc-poc/bridge/internal/testutil"
 )
 
-type testKey struct {
-	privateKey *ecdsa.PrivateKey
-	publicKey  string
-	thumbprint string
-}
-
-func setupTestKey(t *testing.T) testKey {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("failed to generate key: %v", err)
-	}
-
-	xBytes := key.PublicKey.X.Bytes()
-	yBytes := key.PublicKey.Y.Bytes()
-	xPadded := make([]byte, 32)
-	yPadded := make([]byte, 32)
-	copy(xPadded[32-len(xBytes):], xBytes)
-	copy(yPadded[32-len(yBytes):], yBytes)
-
-	// Compute thumbprint per RFC 7638
-	jwkBytes := []byte(`{"crv":"P-256","kty":"EC","x":"` + base64.RawURLEncoding.EncodeToString(xPadded) + `","y":"` + base64.RawURLEncoding.EncodeToString(yPadded) + `"}`)
-	hash := sha256.Sum256(jwkBytes)
-	tmb := base64.RawURLEncoding.EncodeToString(hash[:])
-
-	// Create raw uncompressed public key (0x04 || X || Y) as hex
-	rawBytes := append([]byte{0x04}, append(xPadded, yPadded...)...)
-	pubHex := hex.EncodeToString(rawBytes)
-
-	return testKey{
-		privateKey: key,
-		publicKey:  pubHex,
-		thumbprint: tmb,
-	}
-}
-
-func signCozPayload(t *testing.T, key *ecdsa.PrivateKey, nonce, tmb string) string {
-	t.Helper()
-	now := time.Now().Unix()
-
-	pay := map[string]interface{}{
-		"alg":   "ES256",
-		"tmb":   tmb,
-		"typ":   "cyphr/auth/challenge",
-		"now":   now,
-		"nonce": nonce,
-	}
-
-	payBytes, err := json.Marshal(pay)
-	if err != nil {
-		t.Fatalf("failed to marshal payload: %v", err)
-	}
-
-	hash := sha256.Sum256(payBytes)
-	r, s, err := ecdsa.Sign(rand.Reader, key, hash[:])
-	if err != nil {
-		t.Fatalf("failed to sign: %v", err)
-	}
-
-	rBytes := r.Bytes()
-	sBytes := s.Bytes()
-	sigBytes := append(rBytes, sBytes...)
-	sig := base64.RawURLEncoding.EncodeToString(sigBytes)
-
-	envelope := map[string]interface{}{
-		"pay": pay,
-		"sig": sig,
-	}
-
-	envelopeBytes, err := json.Marshal(envelope)
-	if err != nil {
-		t.Fatalf("failed to marshal envelope: %v", err)
-	}
-
-	return string(envelopeBytes)
-}
-
 func TestE2E_FullFlow(t *testing.T) {
-	key := setupTestKey(t)
+	key := testutil.NewTestKey(t)
+	challengeStore := testutil.NewTestChallengeStore(t)
+	oidcStore := testutil.NewTestOIDCStorage(t, "http://localhost/callback")
+	usersJSON := testutil.BuildUsersJSON(key)
 
-	// Set up stores
-	challengeStore := handlers.NewChallengeStore(time.Minute * 5)
-	oidcStore := storage.NewStorage()
-	oidcStore.RegisterClient(storage.NewClient("test-client", "secret", []string{"http://localhost/callback"}, func(id string) string {
-		return "/login?authRequestID=" + id
-	}))
-
-	usersJSON := `{"` + key.thumbprint + `":{"email":"test@example.com","public_key":"` + key.publicKey + `"}}`
-
-	// Challenge endpoint
 	challengeHandler := handlers.HandleChallenge(challengeStore)
 	challengeReq := httptest.NewRequest("GET", "/api/challenge", nil)
 	challengeReq.RemoteAddr = "192.168.1.100:12345"
@@ -128,10 +42,8 @@ func TestE2E_FullFlow(t *testing.T) {
 		t.Fatal("expected nonce in challenge response")
 	}
 
-	// Sign the challenge
-	cozPayload := signCozPayload(t, key.privateKey, nonce, key.thumbprint)
+	cozPayload := testutil.SignCozPayload(t, key.PrivateKey, nonce, key.Thumbprint)
 
-	// Verify endpoint
 	verifyHandler := handlers.HandleVerify(challengeStore, oidcStore, usersJSON)
 	verifyReq := httptest.NewRequest("POST", "/api/verify?authRequestID=test-req", bytes.NewReader([]byte(cozPayload)))
 	verifyReq.RemoteAddr = "192.168.1.100:12345"
@@ -150,24 +62,20 @@ func TestE2E_FullFlow(t *testing.T) {
 	if verifyResp["email"] != "test@example.com" {
 		t.Errorf("expected email test@example.com, got %s", verifyResp["email"])
 	}
-	if verifyResp["tmb"] != key.thumbprint {
-		t.Errorf("expected thumbprint %s, got %s", key.thumbprint, verifyResp["tmb"])
+	if verifyResp["tmb"] != key.Thumbprint {
+		t.Errorf("expected thumbprint %s, got %s", key.Thumbprint, verifyResp["tmb"])
 	}
 }
 
 func TestE2E_ChallengeThenVerifyWithWrongNonce(t *testing.T) {
-	key := setupTestKey(t)
+	key := testutil.NewTestKey(t)
+	challengeStore := testutil.NewTestChallengeStore(t)
+	oidcStore := testutil.NewTestOIDCStorage(t, "http://localhost/callback")
+	usersJSON := testutil.BuildUsersJSON(key)
 
-	challengeStore := handlers.NewChallengeStore(time.Minute * 5)
-	oidcStore := storage.NewStorage()
-
-	usersJSON := `{"` + key.thumbprint + `":{"email":"test@example.com","public_key":"` + key.publicKey + `"}}`
-
-	// Store a nonce
 	challengeStore.Store("192.168.1.100:12345", "stored-nonce")
 
-	// Sign with a different nonce
-	cozPayload := signCozPayload(t, key.privateKey, "wrong-nonce", key.thumbprint)
+	cozPayload := testutil.SignCozPayload(t, key.PrivateKey, "wrong-nonce", key.Thumbprint)
 
 	verifyHandler := handlers.HandleVerify(challengeStore, oidcStore, usersJSON)
 	verifyReq := httptest.NewRequest("POST", "/api/verify", bytes.NewReader([]byte(cozPayload)))
@@ -181,12 +89,9 @@ func TestE2E_ChallengeThenVerifyWithWrongNonce(t *testing.T) {
 }
 
 func TestE2E_ChallengeThenVerifyWithUnknownKey(t *testing.T) {
-	key := setupTestKey(t)
+	key := testutil.NewTestKey(t)
+	challengeStore := testutil.NewTestChallengeStore(t)
 
-	challengeStore := handlers.NewChallengeStore(time.Minute * 5)
-	oidcStore := storage.NewStorage()
-
-	// Challenge to get a nonce
 	challengeHandler := handlers.HandleChallenge(challengeStore)
 	challengeReq := httptest.NewRequest("GET", "/api/challenge", nil)
 	challengeReq.RemoteAddr = "192.168.1.100:12345"
@@ -196,11 +101,9 @@ func TestE2E_ChallengeThenVerifyWithUnknownKey(t *testing.T) {
 	var challengeResp map[string]string
 	json.NewDecoder(challengeRR.Body).Decode(&challengeResp)
 
-	// Sign with the key, but the key is not in the user store
-	cozPayload := signCozPayload(t, key.privateKey, challengeResp["nonce"], key.thumbprint)
+	cozPayload := testutil.SignCozPayload(t, key.PrivateKey, challengeResp["nonce"], key.Thumbprint)
 
-	// Empty user store
-	verifyHandler := handlers.HandleVerify(challengeStore, oidcStore, "")
+	verifyHandler := handlers.HandleVerify(challengeStore, nil, "")
 	verifyReq := httptest.NewRequest("POST", "/api/verify", bytes.NewReader([]byte(cozPayload)))
 	verifyReq.RemoteAddr = "192.168.1.100:12345"
 	verifyRR := httptest.NewRecorder()
@@ -212,22 +115,16 @@ func TestE2E_ChallengeThenVerifyWithUnknownKey(t *testing.T) {
 }
 
 func TestE2E_ReplayProtection(t *testing.T) {
-	key := setupTestKey(t)
+	key := testutil.NewTestKey(t)
+	challengeStore := testutil.NewTestChallengeStore(t)
+	oidcStore := testutil.NewTestOIDCStorage(t, "http://localhost/callback")
+	usersJSON := testutil.BuildUsersJSON(key)
 
-	challengeStore := handlers.NewChallengeStore(time.Minute * 5)
-	oidcStore := storage.NewStorage()
-
-	usersJSON := `{"` + key.thumbprint + `":{"email":"test@example.com","public_key":"` + key.publicKey + `"}}`
-
-	// Get a nonce
 	challengeStore.Store("192.168.1.100:12345", "replay-nonce")
 
-	// Sign and verify once
-	cozPayload := signCozPayload(t, key.privateKey, "replay-nonce", key.thumbprint)
-
+	cozPayload := testutil.SignCozPayload(t, key.PrivateKey, "replay-nonce", key.Thumbprint)
 	verifyHandler := handlers.HandleVerify(challengeStore, oidcStore, usersJSON)
 
-	// First request
 	verifyReq1 := httptest.NewRequest("POST", "/api/verify", bytes.NewReader([]byte(cozPayload)))
 	verifyReq1.RemoteAddr = "192.168.1.100:12345"
 	verifyRR1 := httptest.NewRecorder()
@@ -237,7 +134,6 @@ func TestE2E_ReplayProtection(t *testing.T) {
 		t.Fatalf("first verify failed: %d", verifyRR1.Code)
 	}
 
-	// Second request (replay) - nonce should be deleted after first use
 	verifyReq2 := httptest.NewRequest("POST", "/api/verify", bytes.NewReader([]byte(cozPayload)))
 	verifyReq2.RemoteAddr = "192.168.1.100:12345"
 	verifyRR2 := httptest.NewRecorder()
@@ -249,29 +145,25 @@ func TestE2E_ReplayProtection(t *testing.T) {
 }
 
 func TestE2E_TimelinessCheck(t *testing.T) {
-	key := setupTestKey(t)
+	key := testutil.NewTestKey(t)
+	challengeStore := testutil.NewTestChallengeStore(t)
+	oidcStore := testutil.NewTestOIDCStorage(t, "http://localhost/callback")
+	usersJSON := testutil.BuildUsersJSON(key)
 
-	challengeStore := handlers.NewChallengeStore(time.Minute * 5)
-	oidcStore := storage.NewStorage()
-
-	usersJSON := `{"` + key.thumbprint + `":{"email":"test@example.com","public_key":"` + key.publicKey + `"}}`
-
-	// Get a nonce
 	challengeStore.Store("192.168.1.100:12345", "timely-nonce")
 
-	// Sign with a timestamp from 2 hours ago
 	now := time.Now().Add(-2 * time.Hour).Unix()
 
 	pay := map[string]interface{}{
 		"alg":   "ES256",
-		"tmb":   key.thumbprint,
+		"tmb":   key.Thumbprint,
 		"typ":   "cyphr/auth/challenge",
 		"now":   now,
 		"nonce": "timely-nonce",
 	}
 	payBytes, _ := json.Marshal(pay)
 	hash := sha256.Sum256(payBytes)
-	r, s, _ := ecdsa.Sign(rand.Reader, key.privateKey, hash[:])
+	r, s, _ := ecdsa.Sign(rand.Reader, key.PrivateKey, hash[:])
 	sigBytes := append(r.Bytes(), s.Bytes()...)
 	sig := base64.RawURLEncoding.EncodeToString(sigBytes)
 
@@ -293,17 +185,25 @@ func TestE2E_TimelinessCheck(t *testing.T) {
 }
 
 func TestE2E_MultipleUsers(t *testing.T) {
-	key1 := setupTestKey(t)
-	key2 := setupTestKey(t)
+	key1 := testutil.NewTestKey(t)
+	key2 := testutil.NewTestKey(t)
 
-	challengeStore := handlers.NewChallengeStore(time.Minute * 5)
-	oidcStore := storage.NewStorage()
+	challengeStore := testutil.NewTestChallengeStore(t)
+	oidcStore := testutil.NewTestOIDCStorage(t, "http://localhost/callback")
 
-	usersJSON := `{"` + key1.thumbprint + `":{"email":"user1@example.com","public_key":"` + key1.publicKey + `"},"` + key2.thumbprint + `":{"email":"user2@example.com","public_key":"` + key2.publicKey + `"}}`
+	usersJSON := testutil.BuildUsersJSONWithEmails(
+		struct {
+			Key   testutil.TestKey
+			Email string
+		}{Key: key1, Email: "user1@example.com"},
+		struct {
+			Key   testutil.TestKey
+			Email string
+		}{Key: key2, Email: "user2@example.com"},
+	)
 
-	// Test with key1
 	challengeStore.Store("192.168.1.100:12345", "user1-nonce")
-	coz1 := signCozPayload(t, key1.privateKey, "user1-nonce", key1.thumbprint)
+	coz1 := testutil.SignCozPayload(t, key1.PrivateKey, "user1-nonce", key1.Thumbprint)
 
 	verifyHandler := handlers.HandleVerify(challengeStore, oidcStore, usersJSON)
 	req1 := httptest.NewRequest("POST", "/api/verify", bytes.NewReader([]byte(coz1)))
@@ -321,9 +221,8 @@ func TestE2E_MultipleUsers(t *testing.T) {
 		t.Errorf("expected user1 email, got %s", resp1["email"])
 	}
 
-	// Test with key2
 	challengeStore.Store("192.168.1.100:54321", "user2-nonce")
-	coz2 := signCozPayload(t, key2.privateKey, "user2-nonce", key2.thumbprint)
+	coz2 := testutil.SignCozPayload(t, key2.PrivateKey, "user2-nonce", key2.Thumbprint)
 
 	req2 := httptest.NewRequest("POST", "/api/verify", bytes.NewReader([]byte(coz2)))
 	req2.RemoteAddr = "192.168.1.100:54321"
