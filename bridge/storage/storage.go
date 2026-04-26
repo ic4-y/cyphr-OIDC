@@ -636,6 +636,6 @@ func loadOrGenerateKey(path string) (*rsa.PrivateKey, error) {
 
 // TestUser is a PoC user with their public key and email.
 type TestUser struct {
-	PublicKey string
-	Email     string
+	PublicKey string `json:"public_key"`
+	Email     string `json:"email"`
 }
