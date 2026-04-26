@@ -50,11 +50,19 @@ export default defineConfig({
           .replace('href="../../assets/', 'href="./assets/');
         writeFileSync(resolve(dist, 'popup.html'), fixedHtml);
 
+        // Flatten options.html with corrected paths
+        const optHtml = readFileSync(resolve(dist, 'src/options/options.html'), 'utf-8');
+        const fixedOptHtml = optHtml
+          .replace('src="./options.tsx"', 'src="./options.js"')
+          .replace('href="../../assets/', 'href="./assets/');
+        writeFileSync(resolve(dist, 'options.html'), fixedOptHtml);
+
         // Update manifest paths for dist layout
         const manifest = JSON.parse(readFileSync(resolve(root, 'manifest.json'), 'utf-8'));
         manifest.content_scripts[0].js = ['content.js'];
         manifest.background.service_worker = 'background.js';
         manifest.action.default_popup = 'popup.html';
+        manifest.options_ui.page = 'options.html';
         writeFileSync(resolve(dist, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
       },
     },
@@ -65,6 +73,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         popup: 'src/popup/popup.html',
+        options: 'src/options/options.html',
       },
       output: {
         entryFileNames: '[name].js',
