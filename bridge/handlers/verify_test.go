@@ -203,7 +203,9 @@ func TestHandleChallenge_StoresNonce(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	var resp map[string]string
-	json.NewDecoder(rr.Body).Decode(&resp)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
 
 	// Verify the nonce is stored
 	stored, ok := store.Get("test-session")

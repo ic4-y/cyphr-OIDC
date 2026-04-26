@@ -95,7 +95,9 @@ func TestE2E_ChallengeThenVerifyWithUnknownKey(t *testing.T) {
 	challengeHandler.ServeHTTP(challengeRR, challengeReq)
 
 	var challengeResp map[string]string
-	json.NewDecoder(challengeRR.Body).Decode(&challengeResp)
+	if err := json.NewDecoder(challengeRR.Body).Decode(&challengeResp); err != nil {
+		t.Fatalf("failed to decode challenge: %v", err)
+	}
 
 	cozPayload := testutil.SignCozPayload(t, key.PrivateKey, challengeResp["nonce"], key.Thumbprint)
 
