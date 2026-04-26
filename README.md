@@ -19,15 +19,16 @@ nix develop
 # 2. Build everything
 just build
 
-# 3. Start the bridge
+# 3. Start the full stack (bridge + redis + forgejo)
 just up
 
 # 4. Verify it's running
 curl http://localhost:8080/.well-known/openid-configuration
 curl http://localhost:8080/health
+curl http://localhost:3000
 ```
 
-The bridge is now serving as an OIDC provider on `http://localhost:8080`. See [Registering a Client Application](#registering-a-client-application) below for connecting Forgejo or any other OIDC-capable app.
+The bridge is now serving as an OIDC provider on `http://localhost:8080`. Forgejo is available at `http://localhost:3000` with an admin user (`admin`/`admin123`) and the CyphrMask OIDC auth source pre-registered. Open `http://localhost:3000/user/login` and click **Sign in with CyphrMask** to test.
 
 ### Deploying a Docker Image
 
@@ -120,9 +121,20 @@ For production deployments, remove `http://localhost:8080/*` from `host_permissi
 
 ## Forgejo Integration
 
-Forgejo supports OpenID Connect authentication natively. Here's how to register the Bridge as an OIDC login source.
+Forgejo supports OpenID Connect authentication natively. The `docker-compose.yml` includes a pre-configured Forgejo instance with SQLite — no external database required.
 
-### Step 1: Register the Bridge as a Client
+### Automated Setup (PoC)
+
+`just up` starts Forgejo with:
+- SQLite database (no Postgres/MySQL)
+- Admin user: `admin` / `admin123`
+- CyphrMask OIDC auth source pre-registered via `forgejo admin auth add-oauth`
+
+Just open `http://localhost:3000/user/login` and click **Sign in with CyphrMask**.
+
+### Manual Setup (Production)
+
+For production deployments, register the Bridge as an OIDC client:
 
 In `bridge/main.go`, add Forgejo as an OIDC client:
 

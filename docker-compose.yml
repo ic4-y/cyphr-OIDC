@@ -8,8 +8,8 @@ services:
       - BRIDGE_PORT=8080
       - BRIDGE_ISSUER_URL=http://localhost:8080
       - BRIDGE_SIGNING_KEY_PATH=/keys/signing-key.pem
-      # - BRIDGE_USERS={"thumbprint":{"email":"user@example.com","public_key":"..."}}
-      # - BRIDGE_CLIENTS=[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]}]
+      - BRIDGE_USERS
+      - BRIDGE_CLIENTS
     volumes:
       - ./keys:/keys
     ports:
@@ -24,6 +24,66 @@ services:
       - "6379:6379"
     networks:
       - cyphrnet
+
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:14
+    container_name: forgejo
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - FORGEJO__database__DB_TYPE=sqlite3
+      - FORGEJO__server__ROOT_URL=http://localhost:3000
+      - FORGEJO__security__INSTALL_LOCK=true
+      - FORGEJO__oauth2_client__USERNAME=email
+    restart: always
+    networks:
+      - cyphrnet
+    volumes:
+      - ./forgejo:/data
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "3000:3000"
+      - "222:22"
+    depends_on:
+      bridge:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  forgejo-init:
+    image: codeberg.org/forgejo/forgejo:14
+    container_name: forgejo-init
+    depends_on:
+      forgejo:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Creating admin user..."
+        forgejo admin user create \
+          --username admin \
+          --password admin123 \
+          --email admin@localhost \
+          --admin \
+          --must-change-password=false 2>/dev/null || echo "Admin user already exists"
+        echo "Registering CyphrMask OIDC auth source..."
+        forgejo admin auth add-oauth \
+          --name "CyphrMask" \
+          --provider "openidConnect" \
+          --key "forgejo" \
+          --secret "forgejo-secret" \
+          --auto-discover-url "http://cyphr-bridge:8080/.well-known/openid-configuration" \
+          --scopes openid \
+          --scopes email \
+          --scopes profile 2>/dev/null || echo "CyphrMask auth source already exists"
+        echo "Forgejo initialization complete."
+    networks:
+      - cyphrnet
+    volumes:
+      - ./forgejo:/data
 
 networks:
   cyphrnet:

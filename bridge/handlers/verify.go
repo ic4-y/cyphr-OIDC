@@ -104,10 +104,10 @@ func HandleVerify(store *ChallengeStore, oidcStore *storage.Storage, usersJSON s
 			return
 		}
 
-		// Complete the OIDC auth request with the user's email as subject
+		// Complete the OIDC auth request with thumbprint as subject and email in claims
 		authReqID := r.URL.Query().Get("authRequestID")
 		if authReqID != "" {
-			oidcStore.CompleteAuthRequest(authReqID, user.Email)
+			oidcStore.CompleteAuthRequest(authReqID, pay.Tmb, user.Email)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
