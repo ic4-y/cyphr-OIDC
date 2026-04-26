@@ -92,8 +92,11 @@ func HandleVerify(store *ChallengeStore, oidcStore *storage.Storage, usersJSON s
 			return
 		}
 
-		sigStr := string(sigRaw)
-		sigStr = sigStr[1 : len(sigStr)-1]
+		var sigStr string
+		if err := json.Unmarshal(sigRaw, &sigStr); err != nil {
+			http.Error(w, "invalid signature encoding", http.StatusBadRequest)
+			return
+		}
 
 		if err := crypto.VerifyCozSignature(payBytes, sigStr, user.PublicKey); err != nil {
 			log.Printf("Coz signature verification failed: %v", err)

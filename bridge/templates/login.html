@@ -107,6 +107,33 @@
     <script>
         const authRequestID = '{{.AuthRequestID}}';
         let currentNonce = '';
+        let extensionReady = false;
+
+        // Listen for messages from the content script
+        window.addEventListener('message', (event) => {
+            if (!event.data || event.data.source !== 'cyphrmask') return;
+
+            if (event.data.type === 'EXTENSION_STATUS') {
+                const status = event.data.status;
+                if (status && status.wasmReady) {
+                    extensionReady = true;
+                    const btn = document.getElementById('sign-btn');
+                    btn.disabled = false;
+                    btn.textContent = 'Sign In with CyphrMask';
+                }
+            }
+
+            if (event.data.type === 'SIGNATURE_RESPONSE') {
+                submitCoz(event.data.coz);
+            }
+
+            if (event.data.type === 'SIGNATURE_ERROR') {
+                showStatus('Error: ' + (event.data.error || 'Unknown error'), 'error');
+                const btn = document.getElementById('sign-btn');
+                btn.disabled = false;
+                btn.textContent = 'Try Again';
+            }
+        });
 
         async function fetchChallenge() {
             try {
@@ -115,51 +142,22 @@
                 const data = await resp.json();
                 currentNonce = data.nonce;
                 document.getElementById('nonce-display').textContent = data.nonce.substring(0, 32) + '...';
-                await checkExtension();
             } catch (err) {
                 showStatus('Failed to load challenge: ' + err.message, 'error');
             }
         }
 
-        async function checkExtension() {
-            try {
-                const resp = await chrome.runtime.sendMessage(
-                    { action: 'PING' }
-                ).catch(() => null);
-
-                if (resp && resp.status === 'ready') {
-                    const btn = document.getElementById('sign-btn');
-                    btn.disabled = false;
-                    btn.textContent = 'Sign In with CyphrMask';
-                } else {
-                    showStatus('Waiting for CyphrMask extension...', 'loading');
-                }
-            } catch {
-                showStatus('Waiting for CyphrMask extension...', 'loading');
-            }
-        }
-
-        document.getElementById('sign-btn').addEventListener('click', async () => {
+        document.getElementById('sign-btn').addEventListener('click', () => {
             const btn = document.getElementById('sign-btn');
             btn.disabled = true;
             btn.textContent = 'Requesting signature...';
             showStatus('Waiting for your approval in CyphrMask...', 'loading');
 
-            try {
-                const resp = await chrome.runtime.sendMessage(
-                    { action: 'REQUEST_SIGNATURE', nonce: currentNonce }
-                );
-
-                if (resp && resp.coz) {
-                    await submitCoz(resp.coz);
-                } else {
-                    throw new Error(resp?.error || 'Signature request failed');
-                }
-            } catch (err) {
-                showStatus('Error: ' + err.message, 'error');
-                btn.disabled = false;
-                btn.textContent = 'Try Again';
-            }
+            window.postMessage({
+                source: 'cyphrmask-bridge',
+                type: 'REQUEST_SIGNATURE',
+                nonce: currentNonce
+            }, '*');
         });
 
         async function submitCoz(cozString) {
