@@ -13,20 +13,30 @@ No fork, no patch, no protocol changes to downstream apps. They just see a stand
 ### From Scratch (5 minutes)
 
 ```bash
-# 0. Allow container-to-host traffic on port 8080
+# 0. Copy environment defaults
+cp .env.example .env
+
+# 1. Allow container-to-host traffic on port 8080
 sudo iptables -I INPUT -p tcp --dport 8080 -j ACCEPT
 # To remove later: sudo iptables -D INPUT -p tcp --dport 8080 -j ACCEPT
 
-# 1. Enter the dev shell (NixOS)
+# 2. Enter the dev shell (NixOS)
 nix develop
 
-# 2. Build everything
+# 3. Build everything
 just build
 
-# 3. Start the full stack (bridge + redis + forgejo)
+# 4. Start the full stack (bridge + redis + forgejo)
 just up
 
-# 4. Verify it's running
+# 5. Generate your key and register your identity
+#    5a. Load the CyphrMask extension (see "Installing the CyphrMask Extension" below)
+#    5b. Click the extension icon → Generate New Key
+#    5c. Switch to Settings tab → click "Copy Bridge User JSON"
+#    5d. Paste into .env: BRIDGE_USERS='<paste here>'
+#    5e. Restart the bridge: just down && just up
+
+# 6. Verify it's running
 curl http://localhost:8080/.well-known/openid-configuration
 curl http://localhost:8080/health
 curl http://localhost:3000
@@ -277,10 +287,12 @@ The Bridge needs to map your Principal Root (`tmb`) to an identity (email + publ
 
 ### Option 1: Environment Variable (recommended for testing)
 
-Copy your `tmb` and public key from the extension's Settings tab, then set:
+In the extension's **Settings** tab, click **Copy Bridge User JSON**. This copies a ready-to-paste `BRIDGE_USERS='...'` line to your clipboard. Paste it into your `.env` file and restart the bridge.
+
+Or construct it manually from your `tmb` and public key:
 
 ```bash
-BRIDGE_USERS='{"cLj8vsYt...":{"email":"you@example.com","public_key":"-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"}}'
+BRIDGE_USERS='{"cLj8vsYt...":{"email":"you@example.com","public_key":"04..."}}'
 ```
 
 Or add to `docker-compose.yml`:
