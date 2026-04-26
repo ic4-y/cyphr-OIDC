@@ -2,6 +2,7 @@
 # Install: https://github.com/casey/just
 
 set shell := ["bash", "-c"]
+set dotenv-load
 
 # Compile Go binary
 build-bridge:

@@ -148,6 +148,15 @@ function App() {
         chrome.runtime.openOptionsPage();
     };
 
+    const copyBridgeUserJSON = () => {
+        if (!identity) return;
+        const pubKey = '04' + identity.publicKeyX + identity.publicKeyY;
+        const json = `{"${identity.thumbprint}":{"public_key":"${pubKey}","email":"user@example.com"}}`;
+        navigator.clipboard.writeText(json);
+        setMessage('Bridge user JSON copied!');
+        setMessageType('success');
+    };
+
     const exportIdentity = () => {
         if (!identity) return;
         const backup = {
@@ -331,6 +340,10 @@ function App() {
                     </div>
 
                     <div className="divider" />
+
+                    <button className="btn-secondary full-width" onClick={copyBridgeUserJSON} title="Copy BRIDGE_USERS JSON">
+                        Copy Bridge User JSON
+                    </button>
 
                     <button className="btn-secondary full-width" onClick={exportIdentity}>
                         Export Identity Backup
