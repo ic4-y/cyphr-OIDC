@@ -10,11 +10,12 @@
   ],
   "host_permissions": [
     "https://*/*",
-    "http://localhost:8080/*"
+    "http://localhost:8080/*",
+    "http://localhost:8089/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://*/*", "http://localhost:8080/*"],
+      "matches": ["https://*/*", "http://localhost:8080/*", "http://localhost:8089/*"],
       "js": ["src/content.js"],
       "run_at": "document_idle"
     }
