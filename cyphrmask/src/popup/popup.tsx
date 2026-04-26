@@ -76,9 +76,14 @@ function App() {
     const detectBridgeHost = async () => {
         try {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (tab?.url) {
+            if (tab?.url && !tab.url.startsWith('chrome-extension://')) {
                 const url = new URL(tab.url);
                 setBridgeHost(url.origin);
+            } else {
+                const result = await chrome.storage.local.get(['bridgeHost']);
+                if (result.bridgeHost) {
+                    setBridgeHost(result.bridgeHost);
+                }
             }
         } catch {
             const result = await chrome.storage.local.get(['bridgeHost']);

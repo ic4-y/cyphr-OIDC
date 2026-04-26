@@ -127,7 +127,7 @@ func (c *Client) RestrictAdditionalAccessTokenScopes() func(scopes []string) []s
 	return func(scopes []string) []string { return scopes }
 }
 func (c *Client) IsScopeAllowed(scope string) bool     { return false }
-func (c *Client) IDTokenUserinfoClaimsAssertion() bool { return false }
+func (c *Client) IDTokenUserinfoClaimsAssertion() bool { return true }
 func (c *Client) ClockSkew() time.Duration             { return 0 }
 
 type Token struct {
