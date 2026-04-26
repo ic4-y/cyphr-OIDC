@@ -4,6 +4,7 @@ services:
       context: ./bridge
       dockerfile: Dockerfile
     container_name: cyphr-bridge
+    network_mode: host
     environment:
       - BRIDGE_PORT=8080
       - BRIDGE_ISSUER_URL=http://localhost:8080
@@ -12,10 +13,6 @@ services:
       - BRIDGE_CLIENTS
     volumes:
       - ./keys:/keys
-    ports:
-      - "8080:8080"
-    networks:
-      - cyphrnet
 
   redis:
     image: redis:7-alpine
