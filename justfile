@@ -2,6 +2,7 @@
 # Install: https://github.com/casey/just
 
 set shell := ["bash", "-c"]
+set dotenv-load
 
 # Compile Go binary
 build-bridge:
@@ -32,6 +33,11 @@ fmt:
 # Lint Go code
 lint:
     cd bridge && go vet ./...
+
+# Run bridge locally for dev testing
+run:
+    mkdir -p bridge/.keys
+    cd bridge && go run ./...
 
 # Start local dev stack
 up:

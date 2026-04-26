@@ -11,7 +11,8 @@ let wasmInitError = null;
 // Initialize Wasm module on startup
 (async () => {
   try {
-    await wasmModule();
+    const wasmUrl = chrome.runtime.getURL('wasm/cyphr_crypto_bg.wasm');
+    await wasmModule(wasmUrl);
     wasmReady = true;
     console.log('[CyphrMask] Wasm crypto module initialized');
   } catch (err) {

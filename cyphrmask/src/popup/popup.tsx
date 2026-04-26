@@ -144,34 +144,17 @@ function App() {
         setImportKey('');
     };
 
-    const importKeyFile = (file: File) => {
-        setImportError('');
-        const reader = new FileReader();
-        reader.onload = async () => {
-            try {
-                const data = JSON.parse(reader.result as string);
-                if (!data.private_key) {
-                    setImportError('Invalid backup: missing private_key');
-                    return;
-                }
-                const result = await sendMsg('IMPORT_KEY', { privateKey: data.private_key });
-                if (result.error) {
-                    setImportError(result.error);
-                    return;
-                }
-                const newIdentity: Identity = {
-                    privateKey: result.privateKey,
-                    publicKeyX: result.publicKeyX,
-                    publicKeyY: result.publicKeyY,
-                    thumbprint: result.thumbprint,
-                };
-                setIdentity(newIdentity);
-                setStatus(prev => ({ ...prev, hasKey: true }));
-            } catch {
-                setImportError('Invalid backup file');
-            }
-        };
-        reader.readAsText(file);
+    const openSettings = () => {
+        chrome.runtime.openOptionsPage();
+    };
+
+    const copyBridgeUserJSON = () => {
+        if (!identity) return;
+        const pubKey = '04' + identity.publicKeyX + identity.publicKeyY;
+        const json = `{"${identity.thumbprint}":{"public_key":"${pubKey}","email":"user@example.com"}}`;
+        navigator.clipboard.writeText(`BRIDGE_USERS='${json}'`);
+        setMessage('Bridge user JSON copied!');
+        setMessageType('success');
     };
 
     const exportIdentity = () => {
@@ -275,14 +258,9 @@ function App() {
                 <button className="btn-secondary" onClick={importKeyHex}>
                     Import Private Key
                 </button>
-                <label className="file-label">
-                    <input
-                        type="file"
-                        accept=".json"
-                        onChange={e => e.target.files?.[0] && importKeyFile(e.target.files[0])}
-                    />
-                    Import Backup File
-                </label>
+                <button className="btn-secondary full-width" onClick={openSettings}>
+                    Import Backup File (opens settings)
+                </button>
                 {importError && <div className="message error">{importError}</div>}
             </div>
         );
@@ -363,6 +341,10 @@ function App() {
 
                     <div className="divider" />
 
+                    <button className="btn-secondary full-width" onClick={copyBridgeUserJSON} title="Copy BRIDGE_USERS JSON">
+                        Copy Bridge User JSON
+                    </button>
+
                     <button className="btn-secondary full-width" onClick={exportIdentity}>
                         Export Identity Backup
                     </button>
@@ -379,15 +361,15 @@ function App() {
                     <button className="btn-secondary full-width" onClick={importKeyHex}>
                         Import Private Key
                     </button>
-                    <label className="file-label">
-                        <input
-                            type="file"
-                            accept=".json"
-                            onChange={e => { e.target.files?.[0] && importKeyFile(e.target.files[0]); setImportError(''); }}
-                        />
-                        Import Backup File
-                    </label>
+                    <button className="btn-secondary full-width" onClick={openSettings}>
+                        Import Backup File (opens settings)
+                    </button>
                     {importError && <div className="message error">{importError}</div>}
+                    {message && (
+                        <div className={`message ${messageType}`}>
+                            {message}
+                        </div>
+                    )}
                 </div>
             )}
         </div>
