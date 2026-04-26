@@ -87,6 +87,7 @@ func HandleVerify(store *ChallengeStore, oidcStore *storage.Storage, usersJSON s
 		payBytes := []byte(payRaw)
 
 		user, ok := users[pay.Tmb]
+		log.Printf("verify: thumbprint=%q found=%v publicKey=%q", pay.Tmb, ok, user.PublicKey)
 		if !ok {
 			http.Error(w, "unknown key thumbprint", http.StatusUnauthorized)
 			return
