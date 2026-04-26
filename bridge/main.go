@@ -62,7 +62,8 @@ func main() {
 
 	router.Mount("/", http.Handler(provider))
 	router.Handle("/login", loginHandler)
-	router.HandleFunc("/login/callback", op.AuthorizeCallbackHandler(provider))
+	router.Handle("/login/callback", handlers.NewCallbackHandler(oidcStore))
+	router.Handle("/callback", handlers.NewTokenCallbackHandler(oidcStore))
 	router.HandleFunc("GET /api/challenge", handlers.HandleChallenge(challengeStore))
 	router.HandleFunc("POST /api/verify", handlers.HandleVerify(challengeStore, oidcStore, cfg.Users))
 	router.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

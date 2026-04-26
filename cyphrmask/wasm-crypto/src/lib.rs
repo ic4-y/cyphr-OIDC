@@ -55,10 +55,9 @@ fn sign_bytes(data: &[u8], private_key_hex: &str) -> String {
 
     let signing_key = SigningKey::from(secret_key);
 
-    // Hash the data first (ES256 = ECDSA + SHA-256)
-    let hash = Sha256::digest(data);
-
-    let signature: Signature = signing_key.sign(&hash);
+    // ecdsa::SigningKey::sign already hashes with SHA-256 internally.
+    // Do NOT pre-hash — signing a pre-hashed value would double-hash.
+    let signature: Signature = signing_key.sign(data);
 
     // Encode as base64url (r || s concatenation)
     let sig_bytes = signature.to_bytes();

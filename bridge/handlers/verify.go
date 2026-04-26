@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -86,11 +85,8 @@ func HandleVerify(store *ChallengeStore, oidcStore *storage.Storage, usersJSON s
 		store.Delete(sessionID)
 
 		payBytes := []byte(payRaw)
-		hash := sha256.Sum256(payBytes)
-		log.Printf("verify: payHash=%x payBytes=%q (len=%d)", hash[:], string(payBytes), len(payBytes))
 
 		user, ok := users[pay.Tmb]
-		log.Printf("verify: thumbprint=%q found=%v publicKey=%q", pay.Tmb, ok, user.PublicKey)
 		if !ok {
 			http.Error(w, "unknown key thumbprint", http.StatusUnauthorized)
 			return
@@ -101,7 +97,6 @@ func HandleVerify(store *ChallengeStore, oidcStore *storage.Storage, usersJSON s
 			http.Error(w, "invalid signature encoding", http.StatusBadRequest)
 			return
 		}
-		log.Printf("verify: sig=%q (len=%d)", sigStr, len(sigStr))
 
 		if err := crypto.VerifyCozSignature(payBytes, sigStr, user.PublicKey); err != nil {
 			log.Printf("Coz signature verification failed: %v", err)

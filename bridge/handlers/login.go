@@ -29,7 +29,6 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the auth request to get the client info
 	req, err := h.store.AuthRequestByID(r.Context(), authReqID)
 	if err != nil {
 		log.Printf("login handler: auth request not found: %v", err)
@@ -41,10 +40,14 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		AuthRequestID string
 		ClientID      string
 		Issuer        string
+		RedirectURI   string
+		State         string
 	}{
 		AuthRequestID: authReqID,
 		ClientID:      req.GetClientID(),
 		Issuer:        h.issuer,
+		RedirectURI:   req.GetRedirectURI(),
+		State:         req.GetState(),
 	}
 
 	w.Header().Set("Content-Type", "text/html")
