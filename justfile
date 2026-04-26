@@ -33,6 +33,10 @@ fmt:
 lint:
     cd bridge && go vet ./...
 
+# Run bridge locally for dev testing
+run:
+    cd bridge && go run ./...
+
 # Start local dev stack
 up:
     docker compose up -d
