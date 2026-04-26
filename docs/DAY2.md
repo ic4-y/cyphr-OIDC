@@ -106,6 +106,51 @@ All changes merged via PR #2, squashed into `main`:
 
 ---
 
+## Testing Infrastructure (PR #6 — feat/comprehensive-testing)
+
+### Test Suite
+
+**127 tests total** across 3 ecosystems:
+
+| Layer | Tests | Coverage |
+|-------|-------|----------|
+| Go — crypto | 27 (coz: 16, multihash: 11) | 89.8% |
+| Go — handlers | 25 (challenge: 13, verify: 10, callback: 5, token_callback: 3) | 69.0% |
+| Go — storage | 19 | 29.4% |
+| Go — e2e | 6 | integration flow covered |
+| Go — testutil | 9 helpers (covered by callers) | n/a |
+| Rust wasm | 13 | all pass |
+| Extension | 17 (background: 11, content: 6) | all pass (mocks) |
+| **Total** | **127** | **40.5% Go overall** |
+
+### New Test Files
+
+- `bridge/crypto/coz_test.go` — expanded from 3 to 16 tests (signature verification, timeliness, thumbprint)
+- `bridge/crypto/multihash_test.go` — 11 new tests (EncodeMultihash, ParseMultihash, Equal, round-trip)
+- `bridge/handlers/challenge_test.go` — 13 tests (ChallengeStore lifecycle, nonce/state generation)
+- `bridge/handlers/verify_test.go` — 10 tests (loadUsers, HTTP handler error paths)
+- `bridge/handlers/callback_test.go` — 5 tests (CallbackHandler.ServeHTTP, genCode)
+- `bridge/handlers/token_callback_test.go` — 3 tests (TokenCallbackHandler.ServeHTTP)
+- `bridge/e2e/e2e_test.go` — 6 tests (full flow, nonce mismatch, unknown key, replay, timeliness, multi-user)
+- `bridge/storage/storage_test.go` — 19 tests (auth requests, codes, clients, username/password)
+- `bridge/storage/testing.go` — test helpers (CreateTestAuthRequest, CompleteTestAuthRequest)
+- `bridge/internal/testutil/testutil.go` — shared test utilities (NewTestKey, SignCozPayload, BuildUsersJSON)
+- `cyphrmask/src/__tests__/background.test.js` — 11 tests (message routing)
+- `cyphrmask/src/__tests__/content.test.js` — 6 tests (postMessage bridge)
+- `cyphrmask/vitest.config.js` — Vitest configuration
+- `cyphrmask/src/__tests__/setup.js` — Chrome API mocks
+
+### CI & Tooling
+
+- `.github/workflows/test.yml` — GitHub Actions: Go tests, Rust tests, extension tests, build verification
+- `justfile` — `test`, `test-go`, `test-go-unit`, `test-go-e2e`, `test-rust`, `test-extension` recipes
+
+### Fully Covered (100%)
+
+- `crypto/multihash.go`, `handlers/callback.go`, `handlers/token_callback.go`, `handlers/challenge.go`, `crypto/coz.go` (core functions)
+
+---
+
 ## Blockers Remaining
 
 ### 🟡 No HTTPS/TLS
@@ -120,11 +165,17 @@ Forgejo was not tested as an OIDC client. The full flow works with the built-in 
 
 User identity mapping still relies on `BRIDGE_USERS` env var. No runtime user management, no password/PIN to unlock the extension, no multi-user support.
 
+### 🔴 CI Failures (PR #6)
+
+- **Missing go.sum** — dependencies added by tests (storage, handlers) were not committed to `go.sum`
+- **Node.js 20 deprecation** — GitHub Actions `actions/checkout@v4` and `actions/setup-go@v5` running on deprecated Node.js 20 runtime
+
 ---
 
 ## Next Steps (Priority Order)
 
-1. **Test with Forgejo** — register as an OIDC client, configure Forgejo to use the bridge, verify full auth flow
-2. **Add TLS** — Caddy reverse proxy with Let's Encrypt for HTTPS
-3. **Extension unlock PIN** — require a PIN to use the extension, preventing unauthorized signing
-4. **User database** — replace `BRIDGE_USERS` with a persistent store
+1. **Fix CI** — commit `go.sum`, update GitHub Actions to Node.js 24 compatible versions
+2. **Test with Forgejo** — register as an OIDC client, configure Forgejo to use the bridge, verify full auth flow
+3. **Add TLS** — Caddy reverse proxy with Let's Encrypt for HTTPS
+4. **Extension unlock PIN** — require a PIN to use the extension, preventing unauthorized signing
+5. **User database** — replace `BRIDGE_USERS` with a persistent store
