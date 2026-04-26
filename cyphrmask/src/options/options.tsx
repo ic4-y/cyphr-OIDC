@@ -127,7 +127,8 @@ function App() {
                 setIdentity(newIdentity);
                 setHasKey(true);
                 setStatusMessage('Backup imported successfully.');
-            } catch {
+            } catch (err) {
+                console.error('[CyphrMask] Failed to import backup:', err);
                 setImportError('Invalid backup file');
             }
         };
