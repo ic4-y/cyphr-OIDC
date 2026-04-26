@@ -1,0 +1,95 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-tests:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run Go tests
+        run: cd bridge && go test ./... -v -coverprofile=coverage.out
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: bridge/coverage.out
+          fail_ci_if_error: false
+
+  rust-tests:
+    name: Rust Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run Rust tests
+        run: cd cyphrmask/wasm-crypto && cargo test --verbose
+
+  extension-tests:
+    name: Extension Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cyphrmask/package-lock.json
+
+      - name: Install dependencies
+        run: cd cyphrmask && npm ci
+
+      - name: Run extension tests
+        run: cd cyphrmask && npm test
+
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: [go-tests, rust-tests, extension-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Verify Go build
+        run: cd bridge && go build ./...
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+
+      - name: Verify Wasm build
+        run: cd cyphrmask/wasm-crypto && wasm-pack build --target web --out-dir ../src/wasm
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cyphrmask/package-lock.json
+
+      - name: Verify extension build
+        run: cd cyphrmask && npm ci && npx vite build

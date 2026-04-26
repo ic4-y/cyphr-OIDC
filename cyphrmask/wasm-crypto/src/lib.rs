@@ -178,4 +178,131 @@ mod tests {
 
         assert_eq!(tp1, tp2);
     }
+
+    #[test]
+    fn test_sign_contains_expected_fields() {
+        let priv_hex = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+        let pub_x = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+        let pub_y = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3";
+        let thumbprint = compute_thumbprint(pub_x, pub_y);
+        let nonce = "unique-nonce-value";
+
+        let coz = sign_action(priv_hex, nonce, &thumbprint);
+        let envelope: serde_json::Value = serde_json::from_str(&coz).unwrap();
+        let pay = envelope.get("pay").unwrap();
+
+        assert_eq!(pay.get("tmb").unwrap().as_str().unwrap(), thumbprint);
+        assert_eq!(pay.get("nonce").unwrap().as_str().unwrap(), nonce);
+        assert!(pay.get("now").unwrap().as_i64().is_some());
+    }
+
+    #[test]
+    fn test_sign_different_nonces_produce_different_signatures() {
+        let priv_hex = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+        let pub_x = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+        let pub_y = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3";
+        let thumbprint = compute_thumbprint(pub_x, pub_y);
+
+        let coz1 = sign_action(priv_hex, "nonce-a", &thumbprint);
+        let coz2 = sign_action(priv_hex, "nonce-b", &thumbprint);
+
+        let env1: serde_json::Value = serde_json::from_str(&coz1).unwrap();
+        let env2: serde_json::Value = serde_json::from_str(&coz2).unwrap();
+
+        assert_ne!(
+            env1.get("sig").unwrap().as_str().unwrap(),
+            env2.get("sig").unwrap().as_str().unwrap()
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid hex in private key")]
+    fn test_sign_invalid_hex_key() {
+        sign_action("not-hex!!!", "nonce", "thumbprint");
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid P-256 private key")]
+    fn test_sign_wrong_key_length() {
+        sign_action("deadbeef", "nonce", "thumbprint");
+    }
+
+    #[test]
+    fn test_generate_keypair_output_shape() {
+        let output = generate_keypair();
+        let json: serde_json::Value = serde_json::from_str(&output).unwrap();
+
+        let priv_key = json.get("private_key").unwrap().as_str().unwrap();
+        let pub_x = json.get("public_key_x").unwrap().as_str().unwrap();
+        let pub_y = json.get("public_key_y").unwrap().as_str().unwrap();
+
+        assert_eq!(priv_key.len(), 64, "private key should be 32 bytes hex");
+        assert_eq!(pub_x.len(), 64, "public key x should be 32 bytes hex");
+        assert_eq!(pub_y.len(), 64, "public key y should be 32 bytes hex");
+    }
+
+    #[test]
+    fn test_generate_keypair_unique() {
+        let output1 = generate_keypair();
+        let output2 = generate_keypair();
+
+        assert_ne!(output1, output2, "keypairs should be unique");
+    }
+
+    #[test]
+    fn test_derive_public_key_roundtrip() {
+        let keypair = generate_keypair();
+        let json: serde_json::Value = serde_json::from_str(&keypair).unwrap();
+        let priv_hex = json.get("private_key").unwrap().as_str().unwrap();
+        let expected_x = json.get("public_key_x").unwrap().as_str().unwrap();
+        let expected_y = json.get("public_key_y").unwrap().as_str().unwrap();
+
+        let derived = derive_public_key(priv_hex);
+        let derived_json: serde_json::Value = serde_json::from_str(&derived).unwrap();
+
+        assert_eq!(
+            derived_json.get("public_key_x").unwrap().as_str().unwrap(),
+            expected_x
+        );
+        assert_eq!(
+            derived_json.get("public_key_y").unwrap().as_str().unwrap(),
+            expected_y
+        );
+        assert!(derived_json.get("thumbprint").unwrap().as_str().is_some());
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid hex in private key")]
+    fn test_derive_public_key_invalid_hex() {
+        derive_public_key("not-hex!!!");
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid P-256 private key")]
+    fn test_derive_public_key_wrong_length() {
+        derive_public_key("deadbeef");
+    }
+
+    #[test]
+    fn test_compute_thumbprint_different_inputs() {
+        let tp1 = compute_thumbprint("aa".repeat(32).as_str(), "bb".repeat(32).as_str());
+        let tp2 = compute_thumbprint("cc".repeat(32).as_str(), "dd".repeat(32).as_str());
+
+        assert_ne!(
+            tp1, tp2,
+            "different key coordinates should produce different thumbprints"
+        );
+    }
+
+    #[test]
+    fn test_compute_thumbprint_format() {
+        let pub_x = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+        let pub_y = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3";
+
+        let tp = compute_thumbprint(pub_x, pub_y);
+
+        assert!(!tp.contains('+'), "thumbprint should be base64url (no +)");
+        assert!(!tp.contains('/'), "thumbprint should be base64url (no /)");
+        assert!(!tp.contains('='), "thumbprint should be base64url (no =)");
+    }
 }
