@@ -28,7 +28,7 @@ curl http://localhost:8080/health
 curl http://localhost:3000
 ```
 
-The bridge is now serving as an OIDC provider on `http://localhost:8080`. Forgejo is available at `http://localhost:3000` with an admin user (`admin`/`admin123`) and the CyphrMask OIDC auth source pre-registered. Open `http://localhost:3000/user/login` and click **Sign in with CyphrMask** to test.
+The bridge is now serving as an OIDC provider on `http://localhost:8080`. Forgejo is available at `http://localhost:3000` with an admin user (`forgejo-admin`/`admin123`) and the CyphrMask OIDC auth source pre-registered. Open `http://localhost:3000/user/login` and click **Sign in with CyphrMask** to test.
 
 ### Deploying a Docker Image
 
@@ -127,7 +127,7 @@ Forgejo supports OpenID Connect authentication natively. The `docker-compose.yml
 
 `just up` starts Forgejo with:
 - SQLite database (no Postgres/MySQL)
-- Admin user: `admin` / `admin123`
+- Admin user: `forgejo-admin` / `admin123`
 - CyphrMask OIDC auth source pre-registered via `forgejo admin auth add-oauth`
 
 Just open `http://localhost:3000/user/login` and click **Sign in with CyphrMask**.

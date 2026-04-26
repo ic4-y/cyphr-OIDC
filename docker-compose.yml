@@ -56,6 +56,7 @@ services:
   forgejo-init:
     image: codeberg.org/forgejo/forgejo:14
     container_name: forgejo-init
+    user: "1000:1000"
     depends_on:
       forgejo:
         condition: service_healthy
@@ -64,7 +65,7 @@ services:
       - |
         echo "Creating admin user..."
         forgejo admin user create \
-          --username admin \
+          --username forgejo-admin \
           --password admin123 \
           --email admin@localhost \
           --admin \
