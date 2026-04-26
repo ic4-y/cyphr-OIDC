@@ -517,6 +517,10 @@ func (s *Storage) SetIntrospectionFromToken(ctx context.Context, introspection *
 	return fmt.Errorf("token not valid for this client")
 }
 
+// findEmailBySubject looks up the email for a given subject (thumbprint or user ID)
+// by scanning in-memory auth requests. The auth request is deleted by zitadel only
+// after both the access token and ID token are created (op/token.go:50), so this
+// lookup succeeds during the token creation flow.
 func (s *Storage) findEmailBySubject(userID string) string {
 	for _, req := range s.authRequests {
 		if req.UserID == userID && req.Email != "" {

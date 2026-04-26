@@ -68,7 +68,7 @@ services:
           --password admin123 \
           --email admin@localhost \
           --admin \
-          --must-change-password=false 2>/dev/null || echo "Admin user already exists"
+          --must-change-password=false || echo "Admin user already exists or creation failed"
         echo "Registering CyphrMask OIDC auth source..."
         forgejo admin auth add-oauth \
           --name "CyphrMask" \
@@ -78,7 +78,7 @@ services:
           --auto-discover-url "http://cyphr-bridge:8080/.well-known/openid-configuration" \
           --scopes openid \
           --scopes email \
-          --scopes profile 2>/dev/null || echo "CyphrMask auth source already exists"
+          --scopes profile || echo "CyphrMask auth source already exists or registration failed"
         echo "Forgejo initialization complete."
     networks:
       - cyphrnet
