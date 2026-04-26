@@ -365,6 +365,11 @@ function App() {
                         Import Backup File (opens settings)
                     </button>
                     {importError && <div className="message error">{importError}</div>}
+                    {message && (
+                        <div className={`message ${messageType}`}>
+                            {message}
+                        </div>
+                    )}
                 </div>
             )}
         </div>
