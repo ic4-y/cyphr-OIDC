@@ -1,7 +1,30 @@
 
 
+---
+
+## Status: COMPLETE (2026-04-26)
+
+All phases implemented. The repo is public at https://github.com/ic4-y/cyphr-OIDC.
+
+### What was built
+
+- **Go Bridge** — Full OIDC provider via `zitadel/oidc/v3` with Coz signature verification
+- **Rust Wasm crypto** — Deterministic Coz signing, thumbprint computation, key generation
+- **CyphrMask extension** — Manifest V3, React popup, Wasm service worker, content script bridge
+- **Forgejo integration** — Pre-configured in `docker-compose.yml` with SQLite, auto admin user, auto OIDC auth source
+- **End-to-end flow** — Forgejo → Bridge → Extension signs → Bridge verifies → OIDC token → Forgejo creates user
+
+### What was NOT built (intentionally deferred)
+
+- **TLS / HTTPS** — HTTP only with `op.WithAllowInsecure()`. Add Caddy reverse proxy for production.
+- **User database** — Env-var based (`BRIDGE_USERS`). No runtime user management.
+- **Extension unlock PIN** — No PIN protecting signing operations.
+- **Authelia integration** — The original plan mentioned Authelia, but Forgejo was used instead as the real-world OIDC client.
+
+---
 
 Based on the core mechanics and specifications of the Cyphr protocol, here is the **Enriched Cyphr-OIDC Bridge & CyphrMask PoC Plan**. 
+
 
 Since Cyphr introduces very specific cryptographic constraints—most notably **Coz (Bit-Perfect JSON Signing)**, **MultihashDigests**, and **Implicit Promotion**—we must design the Bridge and Extension to handle these data structures flawlessly. Standard web tools (like JavaScript's `JSON.stringify`) will break the signature if not handled correctly.
 
