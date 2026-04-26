@@ -6,7 +6,7 @@ services:
     container_name: cyphr-bridge
     environment:
       - BRIDGE_PORT=8080
-      - BRIDGE_ISSUER_URL=http://cyphr-bridge:8080
+      - BRIDGE_ISSUER_URL=http://localhost:8080
       - BRIDGE_SIGNING_KEY_PATH=/keys/signing-key.pem
       - BRIDGE_USERS
       - BRIDGE_CLIENTS
@@ -38,6 +38,8 @@ services:
     restart: always
     networks:
       - cyphrnet
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./forgejo:/data
       - /etc/localtime:/etc/localtime:ro
@@ -76,7 +78,7 @@ services:
           --provider "openidConnect" \
           --key "forgejo" \
           --secret "forgejo-secret" \
-          --auto-discover-url "http://cyphr-bridge:8080/.well-known/openid-configuration" \
+          --auto-discover-url "http://localhost:8080/.well-known/openid-configuration" \
           --scopes openid \
           --scopes email \
           --scopes profile || echo "CyphrMask auth source already exists or registration failed"
