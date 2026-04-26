@@ -58,6 +58,7 @@ type AuthRequest struct {
 	State         string
 	Nonce         string
 	UserID        string
+	Email         string
 	completed     bool
 	AuthTime      time.Time
 	ResponseType  oidc.ResponseType
@@ -134,6 +135,7 @@ type Token struct {
 	ApplicationID  string
 	RefreshTokenID string
 	Subject        string
+	Email          string
 	Audience       []string
 	Expiration     time.Time
 	Scopes         []string
@@ -146,6 +148,7 @@ type RefreshToken struct {
 	AMR           []string
 	ApplicationID string
 	UserID        string
+	Email         string
 	Audience      []string
 	Expiration    time.Time
 	Scopes        []string
@@ -207,11 +210,12 @@ func (s *Storage) RegisterClient(c *Client) {
 	s.clients[c.id] = c
 }
 
-func (s *Storage) CompleteAuthRequest(id, userID string) {
+func (s *Storage) CompleteAuthRequest(id, subject, email string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	if req, ok := s.authRequests[id]; ok {
-		req.UserID = userID
+		req.UserID = subject
+		req.Email = email
 		req.ApplicationID = req.ClientID
 		req.completed = true
 		req.AuthTime = time.Now()
@@ -294,13 +298,14 @@ func (s *Storage) DeleteAuthRequest(ctx context.Context, id string) error {
 }
 
 func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest) (string, time.Time, error) {
-	var applicationID string
+	var applicationID, email string
 	switch req := request.(type) {
 	case *AuthRequest:
 		applicationID = req.ApplicationID
+		email = req.Email
 	}
 
-	token, err := s.createAccessToken(applicationID, "", request.GetSubject(), request.GetAudience(), request.GetScopes())
+	token, err := s.createAccessToken(applicationID, "", request.GetSubject(), email, request.GetAudience(), request.GetScopes())
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -310,9 +315,17 @@ func (s *Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest
 func (s *Storage) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (accessTokenID, newRefreshTokenID string, expiration time.Time, err error) {
 	applicationID, authTime, amr := getInfoFromRequest(request)
 
+	var email string
+	switch req := request.(type) {
+	case *AuthRequest:
+		email = req.Email
+	case *RefreshTokenRequest:
+		email = req.Email
+	}
+
 	if currentRefreshToken == "" {
 		refreshTokenID := uuid.NewString()
-		accessToken, err := s.createAccessToken(applicationID, refreshTokenID, request.GetSubject(), request.GetAudience(), request.GetScopes())
+		accessToken, err := s.createAccessToken(applicationID, refreshTokenID, request.GetSubject(), email, request.GetAudience(), request.GetScopes())
 		if err != nil {
 			return "", "", time.Time{}, err
 		}
@@ -321,7 +334,7 @@ func (s *Storage) CreateAccessAndRefreshTokens(ctx context.Context, request op.T
 	}
 
 	newRefreshTokenID = uuid.NewString()
-	accessToken, err := s.createAccessToken(applicationID, newRefreshTokenID, request.GetSubject(), request.GetAudience(), request.GetScopes())
+	accessToken, err := s.createAccessToken(applicationID, newRefreshTokenID, request.GetSubject(), email, request.GetAudience(), request.GetScopes())
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
@@ -341,6 +354,7 @@ func (s *Storage) TokenRequestByRefreshToken(ctx context.Context, refreshToken s
 	return &RefreshTokenRequest{
 		ApplicationID: token.ApplicationID,
 		Subject:       token.UserID,
+		Email:         token.Email,
 		AuthTime:      token.AuthTime,
 		AMR:           token.AMR,
 		Audience:      token.Audience,
@@ -425,6 +439,20 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, clientS
 }
 
 func (s *Storage) SetUserinfoFromScopes(ctx context.Context, userinfo *oidc.UserInfo, userID, clientID string, scopes []string) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	userinfo.Subject = userID
+	email := s.findEmailBySubject(userID)
+	for _, scope := range scopes {
+		switch scope {
+		case oidc.ScopeEmail:
+			userinfo.Email = email
+			userinfo.EmailVerified = email != ""
+		case oidc.ScopeProfile:
+			userinfo.PreferredUsername = userID
+			userinfo.Name = userID
+		}
+	}
 	return nil
 }
 
@@ -434,11 +462,11 @@ func (s *Storage) SetUserinfoFromRequest(ctx context.Context, userinfo *oidc.Use
 	userinfo.Subject = token.GetSubject()
 	for _, scope := range scopes {
 		switch scope {
-		case oidc.ScopeOpenID:
-			userinfo.Subject = token.GetSubject()
 		case oidc.ScopeEmail:
-			userinfo.Email = token.GetSubject()
-			userinfo.EmailVerified = true
+			if ar, ok := token.(*AuthRequest); ok {
+				userinfo.Email = ar.Email
+			}
+			userinfo.EmailVerified = userinfo.Email != ""
 		case oidc.ScopeProfile:
 			userinfo.PreferredUsername = token.GetSubject()
 			userinfo.Name = token.GetSubject()
@@ -460,9 +488,8 @@ func (s *Storage) SetUserinfoFromToken(ctx context.Context, userinfo *oidc.UserI
 	userinfo.Subject = token.Subject
 	for _, scope := range token.Scopes {
 		switch scope {
-		case oidc.ScopeOpenID:
 		case oidc.ScopeEmail:
-			userinfo.Email = token.Subject
+			userinfo.Email = token.Email
 			userinfo.EmailVerified = true
 		case oidc.ScopeProfile:
 			userinfo.PreferredUsername = token.Subject
@@ -490,8 +517,35 @@ func (s *Storage) SetIntrospectionFromToken(ctx context.Context, introspection *
 	return fmt.Errorf("token not valid for this client")
 }
 
+// findEmailBySubject looks up the email for a given subject (thumbprint or user ID)
+// by scanning in-memory auth requests. The auth request is deleted by zitadel only
+// after both the access token and ID token are created (op/token.go:50), so this
+// lookup succeeds during the token creation flow.
+func (s *Storage) findEmailBySubject(userID string) string {
+	for _, req := range s.authRequests {
+		if req.UserID == userID && req.Email != "" {
+			return req.Email
+		}
+	}
+	return ""
+}
+
 func (s *Storage) GetPrivateClaimsFromScopes(ctx context.Context, userID, clientID string, scopes []string) (map[string]any, error) {
-	return nil, nil
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	claims := make(map[string]any)
+	email := s.findEmailBySubject(userID)
+	for _, scope := range scopes {
+		switch scope {
+		case oidc.ScopeEmail:
+			claims["email"] = email
+			claims["email_verified"] = email != ""
+		case oidc.ScopeProfile:
+			claims["preferred_username"] = email
+			claims["name"] = email
+		}
+	}
+	return claims, nil
 }
 
 func (s *Storage) GetKeyByIDAndClientID(ctx context.Context, keyID, clientID string) (*jose.JSONWebKey, error) {
@@ -523,7 +577,7 @@ func (s *Storage) ClientCredentialsTokenRequest(ctx context.Context, clientID st
 	return nil, fmt.Errorf("client_credentials grant not supported")
 }
 
-func (s *Storage) createAccessToken(applicationID, refreshTokenID, subject string, audience, scopes []string) (*Token, error) {
+func (s *Storage) createAccessToken(applicationID, refreshTokenID, subject, email string, audience, scopes []string) (*Token, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	token := &Token{
@@ -531,6 +585,7 @@ func (s *Storage) createAccessToken(applicationID, refreshTokenID, subject strin
 		ApplicationID:  applicationID,
 		RefreshTokenID: refreshTokenID,
 		Subject:        subject,
+		Email:          email,
 		Audience:       audience,
 		Expiration:     time.Now().Add(5 * time.Minute),
 		Scopes:         scopes,
@@ -549,6 +604,7 @@ func (s *Storage) createRefreshToken(accessToken *Token, amr []string, authTime 
 		AMR:           amr,
 		ApplicationID: accessToken.ApplicationID,
 		UserID:        accessToken.Subject,
+		Email:         accessToken.Email,
 		Audience:      accessToken.Audience,
 		Expiration:    time.Now().Add(5 * time.Hour),
 		Scopes:        accessToken.Scopes,
@@ -593,6 +649,7 @@ func getInfoFromRequest(req op.TokenRequest) (clientID string, authTime time.Tim
 type RefreshTokenRequest struct {
 	ApplicationID string
 	Subject       string
+	Email         string
 	AuthTime      time.Time
 	AMR           []string
 	Audience      []string

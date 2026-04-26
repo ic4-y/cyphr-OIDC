@@ -53,3 +53,4 @@ bridge/.keys/
 .DS_Store
 Thumbs.db
 docs/
+forgejo/

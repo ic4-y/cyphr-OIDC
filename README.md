@@ -13,21 +13,36 @@ No fork, no patch, no protocol changes to downstream apps. They just see a stand
 ### From Scratch (5 minutes)
 
 ```bash
-# 1. Enter the dev shell (NixOS)
+# 0. Copy environment defaults
+cp .env.example .env
+
+# 1. Allow container-to-host traffic on port 8080
+sudo iptables -I INPUT -p tcp --dport 8080 -j ACCEPT
+# To remove later: sudo iptables -D INPUT -p tcp --dport 8080 -j ACCEPT
+
+# 2. Enter the dev shell (NixOS)
 nix develop
 
-# 2. Build everything
+# 3. Build everything
 just build
 
-# 3. Start the bridge
+# 4. Start the full stack (bridge + redis + forgejo)
 just up
 
-# 4. Verify it's running
+# 5. Generate your key and register your identity
+#    5a. Load the CyphrMask extension (see "Installing the CyphrMask Extension" below)
+#    5b. Click the extension icon → Generate New Key
+#    5c. Switch to Settings tab → click "Copy Bridge User JSON"
+#    5d. Paste into .env: BRIDGE_USERS='<paste here>'
+#    5e. Restart the bridge: just down && just up
+
+# 6. Verify it's running
 curl http://localhost:8080/.well-known/openid-configuration
 curl http://localhost:8080/health
+curl http://localhost:3000
 ```
 
-The bridge is now serving as an OIDC provider on `http://localhost:8080`. See [Registering a Client Application](#registering-a-client-application) below for connecting Forgejo or any other OIDC-capable app.
+The bridge runs directly on the host network (`:8080`). Forgejo uses `extra_hosts` to resolve `localhost` to the Docker host gateway, so the OIDC token exchange works from inside the container. Forgejo is available at `http://localhost:3000` with an admin user (`forgejo-admin`/`admin123`) and the CyphrMask OIDC auth source pre-registered. Open `http://localhost:3000/user/login` and click **Sign in with CyphrMask** to test.
 
 ### Deploying a Docker Image
 
@@ -120,9 +135,20 @@ For production deployments, remove `http://localhost:8080/*` from `host_permissi
 
 ## Forgejo Integration
 
-Forgejo supports OpenID Connect authentication natively. Here's how to register the Bridge as an OIDC login source.
+Forgejo supports OpenID Connect authentication natively. The `docker-compose.yml` includes a pre-configured Forgejo instance with SQLite — no external database required.
 
-### Step 1: Register the Bridge as a Client
+### Automated Setup (PoC)
+
+`just up` starts Forgejo with:
+- SQLite database (no Postgres/MySQL)
+- Admin user: `forgejo-admin` / `admin123`
+- CyphrMask OIDC auth source pre-registered via `forgejo admin auth add-oauth`
+
+Just open `http://localhost:3000/user/login` and click **Sign in with CyphrMask**.
+
+### Manual Setup (Production)
+
+For production deployments, register the Bridge as an OIDC client:
 
 In `bridge/main.go`, add Forgejo as an OIDC client:
 
@@ -130,7 +156,7 @@ In `bridge/main.go`, add Forgejo as an OIDC client:
 oidcStore.RegisterClient(storage.NewClient(
     "forgejo",                         // client_id
     "forgejo-secret",                  // client_secret (save this!)
-    []string{"https://forgejo.example.com/user/oauth2/Cyphr/callback"},
+    []string{"https://forgejo.example.com/user/oauth2/CyphrMask/callback"},
     func(id string) string {
         return "/login?authRequestID=" + id
     },
@@ -186,21 +212,21 @@ This is [an open issue](https://codeberg.org/forgejo/forgejo/issues/732) in Forg
 Any OIDC-capable application can use the Bridge. Register clients via the `BRIDGE_CLIENTS` environment variable:
 
 ```bash
-BRIDGE_CLIENTS='[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]}]'
+BRIDGE_CLIENTS='[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/CyphrMask/callback"]}]'
 ```
 
 Or in `docker-compose.yml`:
 
 ```yaml
 environment:
-  - BRIDGE_CLIENTS=[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]}]
+  - BRIDGE_CLIENTS=[{"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/CyphrMask/callback"]}]
 ```
 
 To register multiple clients:
 
 ```json
 [
-  {"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/Cyphr/callback"]},
+  {"id":"forgejo","secret":"forgejo-secret","redirect_uris":["https://forgejo.example/user/oauth2/CyphrMask/callback"]},
   {"id":"grafana","secret":"grafana-secret","redirect_uris":["https://grafana.example/login/generic_oauth"]}
 ]
 ```
@@ -261,10 +287,12 @@ The Bridge needs to map your Principal Root (`tmb`) to an identity (email + publ
 
 ### Option 1: Environment Variable (recommended for testing)
 
-Copy your `tmb` and public key from the extension's Settings tab, then set:
+In the extension's **Settings** tab, click **Copy Bridge User JSON**. This copies a ready-to-paste `BRIDGE_USERS='...'` line to your clipboard. Paste it into your `.env` file and restart the bridge.
+
+Or construct it manually from your `tmb` and public key:
 
 ```bash
-BRIDGE_USERS='{"cLj8vsYt...":{"email":"you@example.com","public_key":"-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"}}'
+BRIDGE_USERS='{"cLj8vsYt...":{"email":"you@example.com","public_key":"04..."}}'
 ```
 
 Or add to `docker-compose.yml`:
