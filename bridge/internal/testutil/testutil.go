@@ -54,13 +54,16 @@ func NewTestKey(t *testing.T) TestKey {
 
 func SignCozPayload(t *testing.T, key *ecdsa.PrivateKey, nonce, tmb string) string {
 	t.Helper()
-	now := time.Now().Unix()
+	return SignCozPayloadAtTime(t, key, nonce, tmb, time.Now().Unix())
+}
 
+func SignCozPayloadAtTime(t *testing.T, key *ecdsa.PrivateKey, nonce, tmb string, ts int64) string {
+	t.Helper()
 	pay := map[string]interface{}{
 		"alg":   "ES256",
 		"tmb":   tmb,
 		"typ":   "cyphr/auth/challenge",
-		"now":   now,
+		"now":   ts,
 		"nonce": nonce,
 	}
 
@@ -100,28 +103,15 @@ func EncodeUncompressedECKey(x, y *big.Int) string {
 	return hex.EncodeToString(rawBytes)
 }
 
-func BuildUsersJSON(keys ...TestKey) string {
+func BuildUsersJSON(keys map[TestKey]string) string {
 	m := make(map[string]map[string]string)
-	for _, k := range keys {
-		m[k.Thumbprint] = map[string]string{
-			"email":      "test@example.com",
-			"public_key": k.PublicKey,
+	for k, email := range keys {
+		if email == "" {
+			email = "test@example.com"
 		}
-	}
-	b, _ := json.Marshal(m)
-	return string(b)
-}
-
-func BuildUsersJSONWithEmails(keyEmails ...struct {
-	Key   TestKey
-	Email string
-},
-) string {
-	m := make(map[string]map[string]string)
-	for _, ke := range keyEmails {
-		m[ke.Key.Thumbprint] = map[string]string{
-			"email":      ke.Email,
-			"public_key": ke.Key.PublicKey,
+		m[k.Thumbprint] = map[string]string{
+			"email":      email,
+			"public_key": k.PublicKey,
 		}
 	}
 	b, _ := json.Marshal(m)
