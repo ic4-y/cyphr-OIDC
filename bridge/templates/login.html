@@ -107,7 +107,6 @@
     <script>
         const authRequestID = '{{.AuthRequestID}}';
         let currentNonce = '';
-        let extensionReady = false;
 
         // Listen for messages from the content script
         window.addEventListener('message', (event) => {
@@ -116,7 +115,6 @@
             if (event.data.type === 'EXTENSION_STATUS') {
                 const status = event.data.status;
                 if (status && status.wasmReady) {
-                    extensionReady = true;
                     const btn = document.getElementById('sign-btn');
                     btn.disabled = false;
                     btn.textContent = 'Sign In with CyphrMask';
